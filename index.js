@@ -33,8 +33,9 @@ async function startSock() {
 
     if (connection === 'close') {
       isReady = false
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
-      console.log('Connexion fermee. Reconnexion:', shouldReconnect)
+      const statusCode = lastDisconnect?.error?.output?.statusCode
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut
+      console.log('Connexion fermee. Code:', statusCode, '| Message:', lastDisconnect?.error?.message, '| Reconnexion:', shouldReconnect)
       if (shouldReconnect) startSock()
     } else if (connection === 'open') {
       isReady = true
