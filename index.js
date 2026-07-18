@@ -56,10 +56,14 @@ async function startSock() {
 
         const numero = msg.key.remoteJid.split('@')[0]
 
-        console.log('DEBUG message recu - remoteJid:', msg.key.remoteJid, '| numero extrait:', numero, '| ADMIN_PHONE:', process.env.ADMIN_PHONE, '| match:', numero === process.env.ADMIN_PHONE)
+        // Tentative de recuperation du vrai numero WhatsApp meme quand remoteJid est un LID (@lid)
+        const numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
+
+        console.log('DEBUG message recu - remoteJid:', msg.key.remoteJid, '| numero:', numero, '| numeroReel:', numeroReel, '| ADMIN_PHONE:', process.env.ADMIN_PHONE)
 
         // Commande admin : /reprendre <numero> redonne la main a l'IA sur ce numero
-        if (numero === process.env.ADMIN_PHONE) {
+        // (compare au numero LID ET au vrai numero recupere via senderPn)
+        if (numero === process.env.ADMIN_PHONE || numeroReel === process.env.ADMIN_PHONE) {
           const match = texte.trim().match(/^\/reprendre\s+([\d\s]+)/i)
           if (match) {
             const cible = match[1].replace(/[^0-9]/g, '')
@@ -78,9 +82,6 @@ async function startSock() {
           contextInfo?.conversionSource ||
           msg.messageStubParameters?.some?.(p => /facebook|instagram|ctwa/i.test(p))
         )
-
-        // Tentative de recuperation du vrai numero WhatsApp meme quand remoteJid est un LID (@lid)
-        const numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
 
         const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel)
         if (reponse) {
