@@ -3,7 +3,39 @@ const axios = require('axios')
 // Memoire de conversation en RAM : phone -> { history: [], transferred: bool, contexte: object|null }
 const conversations = new Map()
 
-const MAX_HISTORY = 16 // nombre de messages gardes (user + assistant confondus)
+const MAX_HISTORY = 30 // nombre de messages gardes (user + assistant confondus)
+
+async function resumerEchangesAnciens(messagesAResumer, resumePrecedent) {
+  try {
+    const texteEchanges = messagesAResumer.map(m => `${m.role === 'user' ? 'Personne' : 'Assistant'}: ${m.content}`).join('\n')
+    const promptResume = `Resume tres brievement (3-5 phrases max) les points importants de cet echange
+WhatsApp pour qu'un assistant IA puisse s'en souvenir plus tard (infos personnelles donnees, demandes faites,
+sujets abordes). ${resumePrecedent ? `Resume deja existant a completer : "${resumePrecedent}"` : ''}
+
+Echanges a resumer :
+${texteEchanges}
+
+Reponds uniquement avec le texte du resume, sans JSON, sans preambule.`
+
+    const res = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: promptResume }],
+        temperature: 0.3,
+        max_tokens: 200,
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    )
+    return res.data.choices[0].message.content.trim()
+  } catch (err) {
+    console.error('Erreur resume historique:', err.message)
+    return resumePrecedent || ''
+  }
+}
 
 async function recupererContexte(numero) {
   try {
@@ -35,19 +67,42 @@ const REGEX_EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/
 const LIEN_APP = process.env.APP_DOWNLOAD_URL || ''
 
 const AIDE_BEAUTYCRM = `
-Connaissances generales sur l'application BeautyCRM (utilise-les si la personne pose des questions sur l'app) :
-- BeautyCRM est une application web (PWA) pour aider les distributeurs/entrepreneurs beaute (MLM, boutiques, etc.)
-  a gerer leurs clients, ventes, stock et facturation. Ce n'est PAS une app sur l'App Store ou le Play Store.
-- Si la personne demande comment telecharger/installer/avoir l'application, donne-lui TOUJOURS ce lien exact
-  dans ta reponse, mot pour mot : ${LIEN_APP}
-  Explique ensuite qu'il suffit d'ouvrir ce lien dans le navigateur du telephone, puis de faire
-  "Ajouter a l'ecran d'accueil" pour l'installer comme une vraie application.
-  Ne parle JAMAIS de l'App Store, du Play Store, ou de recherche dans un store : ce n'est pas ainsi que
-  BeautyCRM s'installe.
-- Il existe un mode Personnel (pour un utilisateur seul) et un mode Entreprise (pour une equipe avec un
-  administrateur et des employes ayant chacun un acces).
-- En cas de souci de connexion, de facturation, ou de fonctionnalite bloquee, propose de transferer a un humain
-  si tu ne peux pas resoudre avec les informations ci-dessus.`
+Connaissances detaillees sur l'application BeautyCRM (utilise-les si la personne pose des questions sur l'app) :
+
+BeautyCRM est une application web (PWA) de GESTION D'ENTREPRISE complete : gestion des clients, des ventes,
+du stock, de la facturation et de la comptabilite. Elle convient a tout type de petit commerce ou entreprise
+(boutiques, distributeurs, prestataires de services, etc.) - ce n'est pas limite a un secteur en particulier.
+Ce n'est PAS une app sur l'App Store ou le Play Store.
+
+Fonctionnalites principales (modules de l'application) :
+- Clients : fiche complete par client, historique.
+- Contacts : gestion des contacts/prospects.
+- Produits : catalogue produits avec suivi du benefice par produit.
+- Stock : suivi des quantites en stock, alertes.
+- Ventes : creation de ventes avec panier multi-produits, generation de factures.
+- Credits : ventes a credit avec versements/paiements echelonnes, suivi des factures a credit et de leur
+  historique de paiement.
+- Comptabilite : bilan (actif, passif, capitaux propres), suivi financier de l'entreprise.
+- Rapports : resume mensuel, top clients par chiffre d'affaires, performance par canal de vente, export PDF.
+- Rendez-vous : planification de rendez-vous clients.
+- Relances : suivi et relance des clients (paiements en retard, suivi commercial).
+- Seminaires : gestion de seminaires/formations organises par l'entreprise.
+- Tableau de bord : acces rapide aux fonctions, dernieres ventes, prochains rendez-vous.
+- Parametres : devise, informations de facturation, gestion de l'entreprise et des employes, synchronisation
+  Google Drive.
+
+Si la personne demande comment telecharger/installer/avoir l'application, donne-lui TOUJOURS ce lien exact
+dans ta reponse, mot pour mot : ${LIEN_APP}
+Explique ensuite qu'il suffit d'ouvrir ce lien dans le navigateur du telephone, puis de faire
+"Ajouter a l'ecran d'accueil" pour l'installer comme une vraie application.
+Ne parle JAMAIS de l'App Store, du Play Store, ou de recherche dans un store : ce n'est pas ainsi que
+BeautyCRM s'installe.
+
+Il existe un mode Personnel (pour un utilisateur seul) et un mode Entreprise (pour une equipe avec un
+administrateur et des employes ayant chacun un acces).
+
+En cas de souci de connexion, de facturation, ou de fonctionnalite bloquee que tu ne peux pas resoudre avec
+les informations ci-dessus, propose de transferer a un humain.`
 
 const SCRIPT_PREMIER_CONTACT = (lienApp) => `
 
@@ -66,7 +121,16 @@ souhaite savoir ou ce qui l'interesse. Une fois qu'elle a precise sa demande, si
 lien exact de telechargement de l'application (${lienApp}) en expliquant comment l'installer (ouvrir le lien,
 puis "Ajouter a l'ecran d'accueil"). Continue ensuite normalement la conversation.`
 
-function construirePromptSysteme(contexte, estPremierContact, viensDeFacebook) {
+function construirePromptSysteme(contexte, estPremierContact, viensDeFacebook, resumeAnterieur) {
+  const corps = construirePromptSystemeBase(contexte, estPremierContact, viensDeFacebook)
+  if (!resumeAnterieur) return corps
+  return `Resume des echanges precedents avec cette personne (au-dela de ce dont tu te souviens directement) :
+"${resumeAnterieur}"
+
+${corps}`
+}
+
+function construirePromptSystemeBase(contexte, estPremierContact, viensDeFacebook) {
   const inscription = contexte?.inscription_formation
   const utilisateur = contexte?.utilisateur_beautycrm
   const modeEntreprise = contexte?.mode_entreprise
@@ -248,9 +312,14 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
   }
 
   conv.history.push({ role: 'user', content: texteRecu })
-  if (conv.history.length > MAX_HISTORY) conv.history = conv.history.slice(-MAX_HISTORY)
+  if (conv.history.length > MAX_HISTORY) {
+    const nbAEvincer = conv.history.length - MAX_HISTORY
+    const messagesAResumer = conv.history.slice(0, nbAEvincer)
+    conv.resumeAnterieur = await resumerEchangesAnciens(messagesAResumer, conv.resumeAnterieur)
+    conv.history = conv.history.slice(-MAX_HISTORY)
+  }
 
-  const systemPrompt = construirePromptSysteme(conv.contexte, estPremierContact, viensDeFacebook)
+  const systemPrompt = construirePromptSysteme(conv.contexte, estPremierContact, viensDeFacebook, conv.resumeAnterieur)
   let resultat
   try {
     resultat = await appellerGroq(systemPrompt, conv.history)
