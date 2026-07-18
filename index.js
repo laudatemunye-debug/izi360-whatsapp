@@ -3,7 +3,7 @@ const express = require('express')
 const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
-const { gererMessageEntrant } = require('./agent')
+const { gererMessageEntrant, reprendreConversation } = require('./agent')
 
 const PORT = process.env.PORT || 3001
 const SECRET = process.env.WHATSAPP_SECRET || 'change-me'
@@ -55,7 +55,29 @@ async function startSock() {
         if (!texte) continue
 
         const numero = msg.key.remoteJid.split('@')[0]
-        const reponse = await gererMessageEntrant(sock, numero, texte)
+
+        // Commande admin : /reprendre <numero> redonne la main a l'IA sur ce numero
+        if (numero === process.env.ADMIN_PHONE) {
+          const match = texte.trim().match(/^\/reprendre\s+(\d+)/i)
+          if (match) {
+            const cible = match[1].replace(/[^0-9]/g, '')
+            const ok = reprendreConversation(cible)
+            await sock.sendMessage(msg.key.remoteJid, {
+              text: ok ? `✅ L'IA reprend la conversation avec ${cible}.` : `Aucune conversation active trouvee pour ${cible}.`
+            })
+          }
+          continue // les messages de l'admin ne passent jamais par l'agent IA
+        }
+
+        // Detection d'un message venant d'un clic sur "Envoyer un message" Facebook/Instagram
+        const contextInfo = msg.message?.extendedTextMessage?.contextInfo || msg.message?.conversationExtendedTextMessage?.contextInfo
+        const viensDeFacebook = !!(
+          contextInfo?.externalAdReplyInfo ||
+          contextInfo?.conversionSource ||
+          msg.messageStubParameters?.some?.(p => /facebook|instagram|ctwa/i.test(p))
+        )
+
+        const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook)
         if (reponse) {
           await sock.sendMessage(msg.key.remoteJid, { text: reponse })
         }
