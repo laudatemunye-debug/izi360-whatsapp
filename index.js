@@ -77,7 +77,10 @@ async function startSock() {
           msg.messageStubParameters?.some?.(p => /facebook|instagram|ctwa/i.test(p))
         )
 
-        const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook)
+        // Tentative de recuperation du vrai numero WhatsApp meme quand remoteJid est un LID (@lid)
+        const numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
+
+        const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel)
         if (reponse) {
           await sock.sendMessage(msg.key.remoteJid, { text: reponse })
         }

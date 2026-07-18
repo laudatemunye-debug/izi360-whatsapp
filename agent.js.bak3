@@ -174,7 +174,7 @@ async function appellerGroq(systemPrompt, historique) {
   }
 }
 
-async function notifierAdmin(sock, numero, contexte, historique, numeroReel) {
+async function notifierAdmin(sock, numero, contexte, historique) {
   const adminJid = `${process.env.ADMIN_PHONE}@s.whatsapp.net`
   const nom = contexte?.inscription_formation?.nom || contexte?.utilisateur_beautycrm?.nom || 'Inconnu'
   const titreFormation = contexte?.inscription_formation?.titre
@@ -183,7 +183,7 @@ async function notifierAdmin(sock, numero, contexte, historique, numeroReel) {
   const texte = `🔔 *Transfert demande*
 
 *Prospect :* ${nom}
-*Numero :* ${numero}${numeroReel ? ` (vrai numero : ${numeroReel})` : ''}
+*Numero :* ${numero}
 ${titreFormation ? `*Formation :* ${titreFormation}\n` : ''}
 *Derniers echanges :*
 ${dernierMsgs}
@@ -197,7 +197,7 @@ Le prospect a demande a parler a quelqu'un. Contacte-le directement sur WhatsApp
   }
 }
 
-async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = false, numeroReel = null) {
+async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = false) {
   let conv = conversations.get(numero)
 
   if (!conv) {
@@ -215,9 +215,9 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
   // (BeautyCRM identifie les comptes principalement par email, plus fiable que le numero WhatsApp)
   const emailDetecte = texteRecu.match(REGEX_EMAIL)?.[0]
   if (emailDetecte && !conv.emailConfirme) {
-    const contexteParEmail = await recupererContexteParEmail(emailDetecte)
-    if (contexteParEmail) {
-      conv.contexte = contexteParEmail
+    const contextePar Email = await recupererContexteParEmail(emailDetecte)
+    if (contextePar Email) {
+      conv.contexte = contextePar Email
     }
     conv.emailConfirme = emailDetecte
   }
@@ -238,7 +238,7 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
 
   if (resultat.transfert === true) {
     conv.transferred = true
-    await notifierAdmin(sock, numero, conv.contexte, conv.history, numeroReel)
+    await notifierAdmin(sock, numero, conv.contexte, conv.history)
   }
 
   return resultat.reponse
