@@ -34,7 +34,16 @@ Connaissances generales sur l'application BeautyCRM (utilise-les si la personne 
 - En cas de souci de connexion, de facturation, ou de fonctionnalite bloquee, propose de transferer a un humain
   si tu ne peux pas resoudre avec les informations ci-dessus.`
 
-function construirePromptSysteme(contexte) {
+const SCRIPT_PREMIER_CONTACT = (lienApp) => `
+
+SCRIPT DE PREMIER CONTACT (a appliquer seulement si c'est le tout premier message de cette conversation) :
+Avant toute autre chose, demande a la personne si elle a deja installe/telecharge l'application BeautyCRM.
+- Si elle dit OUI (deja installee) : demande-lui son nom et son email pour confirmer son identite.
+- Si elle dit NON (pas encore installee) : donne-lui immediatement le lien exact (${lienApp}) et explique
+  comment l'installer (ouvrir le lien, puis "Ajouter a l'ecran d'accueil").
+Une fois cette question posee et traitee, continue normalement la conversation pour repondre a ses besoins.`
+
+function construirePromptSysteme(contexte, estPremierContact) {
   const inscription = contexte?.inscription_formation
   const utilisateur = contexte?.utilisateur_beautycrm
   const modeEntreprise = contexte?.mode_entreprise
@@ -53,6 +62,7 @@ IMPORTANT : regarde attentivement l'historique de la conversation ci-dessous ava
 
 Reponds a ses questions generales sur BeautyCRM avec les connaissances ci-dessous.
 ${AIDE_BEAUTYCRM}
+${estPremierContact ? SCRIPT_PREMIER_CONTACT(LIEN_APP) : ''}
 
 Si la personne demande explicitement a parler a quelqu'un/un humain/un conseiller, tu dois le detecter.
 Reponds TOUJOURS en JSON strict de cette forme, sans aucun texte autour :
@@ -95,6 +105,7 @@ Cette personne a deja un compte BeautyCRM :
 ${blocFormation}
 ${blocCompte}
 ${AIDE_BEAUTYCRM}
+${estPremierContact ? SCRIPT_PREMIER_CONTACT(LIEN_APP) : ''}
 
 Ton role : reponds a ses questions (formation et/ou app BeautyCRM), aide-la a se sentir accompagnee, guide-la
 pour telecharger/utiliser l'app si besoin, et pose des questions pertinentes pour mieux la qualifier si
@@ -176,10 +187,12 @@ async function gererMessageEntrant(sock, numero, texteRecu) {
   // Si deja transfere, l'IA ne repond plus - laisse la main a l'humain
   if (conv.transferred) return null
 
+  const estPremierContact = conv.history.length === 0
+
   conv.history.push({ role: 'user', content: texteRecu })
   if (conv.history.length > MAX_HISTORY) conv.history = conv.history.slice(-MAX_HISTORY)
 
-  const systemPrompt = construirePromptSysteme(conv.contexte)
+  const systemPrompt = construirePromptSysteme(conv.contexte, estPremierContact)
   let resultat
   try {
     resultat = await appellerGroq(systemPrompt, conv.history)
