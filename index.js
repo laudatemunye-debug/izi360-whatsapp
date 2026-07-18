@@ -56,6 +56,8 @@ async function startSock() {
 
         const numero = msg.key.remoteJid.split('@')[0]
 
+        console.log('DEBUG message recu - remoteJid:', msg.key.remoteJid, '| numero extrait:', numero, '| ADMIN_PHONE:', process.env.ADMIN_PHONE, '| match:', numero === process.env.ADMIN_PHONE)
+
         // Commande admin : /reprendre <numero> redonne la main a l'IA sur ce numero
         if (numero === process.env.ADMIN_PHONE) {
           const match = texte.trim().match(/^\/reprendre\s+([\d\s]+)/i)
