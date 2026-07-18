@@ -11,7 +11,8 @@ async function recupererContexte(numero) {
       `${process.env.BACKEND_API_URL}/formations/contexte/${numero}`,
       { headers: { Authorization: `Bearer ${process.env.WHATSAPP_SECRET}` }, timeout: 8000 }
     )
-    return res.data
+    // Trouve directement par le numero WhatsApp de l'expediteur -> identite fiable d'office
+    return { ...res.data, identite_verifiee: true }
   } catch (err) {
     return null // pas de contexte trouve, l'agent repondra de facon generique
   }
@@ -108,19 +109,33 @@ Informations de la formation "${inscription.titre}" :
 
   let blocCompte = ''
   if (utilisateur) {
-    let statutTexte = 'non determine'
-    if (modeEntreprise?.statut === 'administrateur') {
-      statutTexte = `Administrateur d'entreprise${modeEntreprise.entreprise_fermee ? ' (compte entreprise FERME - a signaler si pertinent)' : ''}`
-    } else if (modeEntreprise?.statut === 'employe') {
-      statutTexte = `Employe (poste: ${modeEntreprise.poste || 'non precise'})${modeEntreprise.acces_revoque ? ' - ACCES REVOQUE, orienter vers son administrateur ou transferer' : ''}`
-    } else if (modeEntreprise?.statut === 'personnel') {
-      statutTexte = 'Utilisateur en mode personnel'
-    }
-    blocCompte = `
-Cette personne a deja un compte BeautyCRM :
+    const identiteVerifiee = contexte?.identite_verifiee === true
+
+    if (!identiteVerifiee) {
+      blocCompte = `
+Un compte BeautyCRM existe pour l'email/nom mentionne, MAIS le numero WhatsApp qui ecrit ne correspond PAS
+au numero enregistre pour ce compte. IDENTITE NON VERIFIEE.
+- Tu peux confirmer poliment le PRENOM ${utilisateur.nom ? `(indice: commence par "${utilisateur.nom[0]}")` : ''}
+  si la personne te le redemande, mais NE REVELE JAMAIS le nom complet, le nom de l'entreprise, la devise,
+  le code de parrainage, ou le statut entreprise/employe tant que l'identite n'est pas confirmee autrement
+  (par exemple si elle connait deja ces details elle-meme).
+- Si la personne insiste pour obtenir des informations sensibles sur ce compte, transfere a un humain plutot
+  que de les donner toi-meme.`
+    } else {
+      let statutTexte = 'non determine'
+      if (modeEntreprise?.statut === 'administrateur') {
+        statutTexte = `Administrateur d'entreprise${modeEntreprise.entreprise_fermee ? ' (compte entreprise FERME - a signaler si pertinent)' : ''}`
+      } else if (modeEntreprise?.statut === 'employe') {
+        statutTexte = `Employe (poste: ${modeEntreprise.poste || 'non precise'})${modeEntreprise.acces_revoque ? ' - ACCES REVOQUE, orienter vers son administrateur ou transferer' : ''}`
+      } else if (modeEntreprise?.statut === 'personnel') {
+        statutTexte = 'Utilisateur en mode personnel'
+      }
+      blocCompte = `
+Cette personne a deja un compte BeautyCRM (identite verifiee via son numero WhatsApp) :
 - Nom : ${utilisateur.nom}
 - Version : ${utilisateur.version || 'non precisee'}
 - Statut : ${statutTexte}`
+    }
   }
 
   return `Tu es l'assistant WhatsApp d'IZI360 / BeautyCRM.
@@ -214,10 +229,20 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
   // Si un email est detecte dans le message, on le privilegie pour retrouver le contexte
   // (BeautyCRM identifie les comptes principalement par email, plus fiable que le numero WhatsApp)
   const emailDetecte = texteRecu.match(REGEX_EMAIL)?.[0]
-  if (emailDetecte && !conv.emailConfirme) {
+  if (emailDetecte && conv.emailConfirme !== emailDetecte) {
     const contexteParEmail = await recupererContexteParEmail(emailDetecte)
     if (contexteParEmail) {
-      conv.contexte = contexteParEmail
+      // Verification de securite : le numero qui ecrit doit correspondre au numero enregistre
+      // pour cet email, sinon on ne revele pas les infos sensibles (entreprise, devise, etc.)
+      const numeroEnregistre = (
+        contexteParEmail.utilisateur_beautycrm?.telephone ||
+        contexteParEmail.inscription_formation?.telephone ||
+        ''
+      ).replace(/[^0-9]/g, '')
+      const numeroActuel = (numeroReel || numero || '').replace(/[^0-9]/g, '')
+      const identiteVerifiee = numeroEnregistre && numeroActuel && numeroEnregistre === numeroActuel
+
+      conv.contexte = { ...contexteParEmail, identite_verifiee: identiteVerifiee }
     }
     conv.emailConfirme = emailDetecte
   }
