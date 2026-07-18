@@ -221,29 +221,50 @@ Reponds TOUJOURS en JSON strict de cette forme, sans aucun texte autour, sans ba
 {"reponse": "ton message ici", "transfert": true ou false}`
 }
 
+function attendre(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function appellerGroqAvecReessai(payload, tentativesMax = 3) {
+  for (let tentative = 1; tentative <= tentativesMax; tentative++) {
+    try {
+      return await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000,
+        }
+      )
+    } catch (err) {
+      const est429 = err.response?.status === 429
+      if (est429 && tentative < tentativesMax) {
+        const pause = tentative * 2000 // 2s, puis 4s
+        console.log(`Groq 429, nouvelle tentative dans ${pause}ms (essai ${tentative}/${tentativesMax})`)
+        await attendre(pause)
+        continue
+      }
+      throw err
+    }
+  }
+}
+
 async function appellerGroq(systemPrompt, historique) {
   const messages = [
     { role: 'system', content: systemPrompt },
     ...historique,
   ]
 
-  const res = await axios.post(
-    'https://api.groq.com/openai/v1/chat/completions',
-    {
-      model: 'llama-3.3-70b-versatile',
-      messages,
-      response_format: { type: 'json_object' },
-      temperature: 0.4,
-      max_tokens: 400,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 15000,
-    }
-  )
+  const res = await appellerGroqAvecReessai({
+    model: 'llama-3.3-70b-versatile',
+    messages,
+    response_format: { type: 'json_object' },
+    temperature: 0.4,
+    max_tokens: 400,
+  })
 
   const contenu = res.data.choices[0].message.content
   try {
