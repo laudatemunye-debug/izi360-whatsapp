@@ -59,11 +59,9 @@ async function startSock() {
         // Tentative de recuperation du vrai numero WhatsApp meme quand remoteJid est un LID (@lid)
         const numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
 
-        console.log('DEBUG message recu - remoteJid:', msg.key.remoteJid, '| numero:', numero, '| numeroReel:', numeroReel, '| ADMIN_PHONE:', process.env.ADMIN_PHONE)
-
         // Commande admin : /reprendre <numero> redonne la main a l'IA sur ce numero
         // (compare au numero LID ET au vrai numero recupere via senderPn)
-        if (numero === process.env.ADMIN_PHONE || numeroReel === process.env.ADMIN_PHONE) {
+        if (numero === process.env.ADMIN_PHONE || numeroReel === process.env.ADMIN_PHONE || numero === process.env.ADMIN_LID) {
           const match = texte.trim().match(/^\/reprendre\s+([\d\s]+)/i)
           if (match) {
             const cible = match[1].replace(/[^0-9]/g, '')
