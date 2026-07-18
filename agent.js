@@ -17,12 +17,18 @@ async function recupererContexte(numero) {
   }
 }
 
+const LIEN_APP = process.env.APP_DOWNLOAD_URL || ''
+
 const AIDE_BEAUTYCRM = `
 Connaissances generales sur l'application BeautyCRM (utilise-les si la personne pose des questions sur l'app) :
-- BeautyCRM est une application (PWA) pour aider les distributeurs/entrepreneurs beaute (MLM, boutiques, etc.)
-  a gerer leurs clients, ventes, stock et facturation.
-- Pour telecharger/installer : se rendre sur le lien de l'application (fourni par l'equipe), puis "Ajouter a
-  l'ecran d'accueil" depuis le navigateur du telephone.
+- BeautyCRM est une application web (PWA) pour aider les distributeurs/entrepreneurs beaute (MLM, boutiques, etc.)
+  a gerer leurs clients, ventes, stock et facturation. Ce n'est PAS une app sur l'App Store ou le Play Store.
+- Si la personne demande comment telecharger/installer/avoir l'application, donne-lui TOUJOURS ce lien exact
+  dans ta reponse, mot pour mot : ${LIEN_APP}
+  Explique ensuite qu'il suffit d'ouvrir ce lien dans le navigateur du telephone, puis de faire
+  "Ajouter a l'ecran d'accueil" pour l'installer comme une vraie application.
+  Ne parle JAMAIS de l'App Store, du Play Store, ou de recherche dans un store : ce n'est pas ainsi que
+  BeautyCRM s'installe.
 - Il existe un mode Personnel (pour un utilisateur seul) et un mode Entreprise (pour une equipe avec un
   administrateur et des employes ayant chacun un acces).
 - En cas de souci de connexion, de facturation, ou de fonctionnalite bloquee, propose de transferer a un humain
