@@ -20,7 +20,7 @@ Reponds uniquement avec le texte du resume, sans JSON, sans preambule.`
     const res = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
-        model: 'llama-3.3-70b-versatile',
+        model: 'llama-3.1-8b-instant',
         messages: [{ role: 'user', content: promptResume }],
         temperature: 0.3,
         max_tokens: 200,
@@ -259,7 +259,7 @@ async function appellerGroq(systemPrompt, historique) {
   ]
 
   const res = await appellerGroqAvecReessai({
-    model: 'llama-3.3-70b-versatile',
+    model: 'llama-3.1-8b-instant',
     messages,
     response_format: { type: 'json_object' },
     temperature: 0.4,
