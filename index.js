@@ -58,7 +58,7 @@ async function startSock() {
 
         // Commande admin : /reprendre <numero> redonne la main a l'IA sur ce numero
         if (numero === process.env.ADMIN_PHONE) {
-          const match = texte.trim().match(/^\/reprendre\s+(\d+)/i)
+          const match = texte.trim().match(/^\/reprendre\s+([\d\s]+)/i)
           if (match) {
             const cible = match[1].replace(/[^0-9]/g, '')
             const ok = reprendreConversation(cible)
