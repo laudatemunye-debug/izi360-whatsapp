@@ -41,8 +41,17 @@ function construirePromptSysteme(contexte) {
 
   if (!inscription && !utilisateur) {
     return `Tu es l'assistant WhatsApp d'IZI360 / BeautyCRM. Tu ne trouves aucune inscription ni compte lies a ce numero.
-Sois bref, poli, en francais. Demande poliment le nom ou l'email de la personne pour mieux l'aider, ou reponds
-a ses questions generales sur BeautyCRM avec les connaissances ci-dessous.
+Sois bref, poli, en francais.
+
+IMPORTANT : regarde attentivement l'historique de la conversation ci-dessous avant de repondre.
+- Si la personne n'a PAS ENCORE donne son nom ou son email dans les messages precedents, demande-le UNE SEULE
+  FOIS, poliment, dans ta prochaine reponse.
+- Si elle a DEJA donne son nom et/ou son email a un moment de la conversation (meme il y a plusieurs messages),
+  NE LES REDEMANDE JAMAIS. Utilise ce que tu sais deja et continue naturellement la conversation, en repondant
+  a sa demande actuelle.
+- Ne redemande jamais une information deja donnee, quelle qu'elle soit.
+
+Reponds a ses questions generales sur BeautyCRM avec les connaissances ci-dessous.
 ${AIDE_BEAUTYCRM}
 
 Si la personne demande explicitement a parler a quelqu'un/un humain/un conseiller, tu dois le detecter.
@@ -90,6 +99,7 @@ ${AIDE_BEAUTYCRM}
 Ton role : reponds a ses questions (formation et/ou app BeautyCRM), aide-la a se sentir accompagnee, guide-la
 pour telecharger/utiliser l'app si besoin, et pose des questions pertinentes pour mieux la qualifier si
 l'occasion se presente naturellement. Reste bref (2-4 phrases), chaleureux, en francais.
+Regarde l'historique de la conversation avant de repondre : ne redemande jamais une information deja donnee.
 
 Si la personne demande EXPLICITEMENT a parler a quelqu'un, un humain, un conseiller, un responsable, ou dit
 qu'elle veut qu'on l'appelle / la contacte directement, tu dois detecter cette intention. Transfere aussi si
