@@ -3,6 +3,7 @@ const express = require('express')
 const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
+const { gererMessageEntrant } = require('./agent')
 
 const PORT = process.env.PORT || 3001
 const SECRET = process.env.WHATSAPP_SECRET || 'change-me'
@@ -40,6 +41,27 @@ async function startSock() {
     } else if (connection === 'open') {
       isReady = true
       console.log('✅ Connecte a WhatsApp')
+    }
+  })
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return
+    for (const msg of messages) {
+      try {
+        if (msg.key.fromMe) continue
+        if (msg.key.remoteJid?.endsWith('@g.us')) continue // ignore les groupes
+
+        const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text
+        if (!texte) continue
+
+        const numero = msg.key.remoteJid.split('@')[0]
+        const reponse = await gererMessageEntrant(sock, numero, texte)
+        if (reponse) {
+          await sock.sendMessage(msg.key.remoteJid, { text: reponse })
+        }
+      } catch (err) {
+        console.error('Erreur traitement message entrant:', err.message)
+      }
     }
   })
 }
