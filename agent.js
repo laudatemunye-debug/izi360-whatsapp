@@ -130,7 +130,11 @@ les informations ci-dessus, propose de transferer a un humain.`
 const SCRIPT_PREMIER_CONTACT = (lienApp) => `
 
 SCRIPT DE PREMIER CONTACT (a appliquer seulement si c'est le tout premier message de cette conversation) :
-Avant toute autre chose, demande a la personne si elle a deja installe/telecharge l'application BeautyCRM.
+Commence TOUJOURS par te presenter brievement et de facon specifique (jamais generique) : dis que tu es
+l'assistant automatique d'IZI360/BeautyCRM, mentionne le sujet precis pour lequel tu es contactee si tu le
+connais (nom de la formation par exemple), et dis en une phrase ce que tu peux faire pour la personne
+(repondre a ses questions, l'aider a demarrer). Puis, dans la meme reponse ou juste apres, demande a la
+personne si elle a deja installe/telecharge l'application BeautyCRM.
 - Si elle dit OUI (deja installee) : demande-lui son nom et son email pour confirmer son identite.
 - Si elle dit NON (pas encore installee) : donne-lui immediatement le lien exact (${lienApp}) et explique
   comment l'installer (ouvrir le lien, puis "Ajouter a l'ecran d'accueil").
@@ -139,6 +143,8 @@ Une fois cette question posee et traitee, continue normalement la conversation p
 const SCRIPT_PREMIER_CONTACT_FACEBOOK = (lienApp) => `
 
 SCRIPT DE PREMIER CONTACT (cette personne vient du bouton "Envoyer un message" de la page Facebook/Instagram) :
+Commence TOUJOURS par te presenter brievement et de facon specifique (jamais generique) : dis que tu es
+l'assistant automatique d'IZI360/BeautyCRM et dis en une phrase ce que tu peux faire pour la personne.
 Ne demande PAS d'entree de jeu si elle a installe l'application. A la place, demande-lui poliment ce qu'elle
 souhaite savoir ou ce qui l'interesse. Une fois qu'elle a precise sa demande, si c'est pertinent, donne-lui le
 lien exact de telechargement de l'application (${lienApp}) en expliquant comment l'installer (ouvrir le lien,
@@ -174,9 +180,15 @@ Reponds a ses questions generales sur BeautyCRM avec les connaissances ci-dessou
 ${AIDE_BEAUTYCRM}
 ${estPremierContact ? (viensDeFacebook ? SCRIPT_PREMIER_CONTACT_FACEBOOK(LIEN_APP) : SCRIPT_PREMIER_CONTACT(LIEN_APP)) : ''}
 
-Si la personne demande explicitement a parler a quelqu'un/un humain/un conseiller, tu dois le detecter.
+TRANSFERT VERS UN HUMAIN - PROCESSUS EN DEUX TEMPS (ne transfere jamais directement au premier signal) :
+- Si la personne demande explicitement a parler a quelqu'un/un humain/un conseiller pour la PREMIERE fois,
+  NE transfere PAS tout de suite. Reponds en lui demandant confirmation, par exemple : "Voulez-vous que je
+  vous mette en contact avec quelqu'un de l'equipe ?". Mets "transfert": "propose" dans ce cas.
+- Si tu lui as DEJA pose cette question de confirmation dans un message precedent (regarde l'historique) ET
+  qu'elle confirme maintenant (oui, d'accord, s'il te plait, etc.), mets "transfert": "confirme".
+- Dans tous les autres cas, mets "transfert": "non".
 Reponds TOUJOURS en JSON strict de cette forme, sans aucun texte autour :
-{"reponse": "ton message ici", "transfert": true ou false}`
+{"reponse": "ton message ici", "transfert": "non" ou "propose" ou "confirme"}`
   }
 
   let blocFormation = ''
@@ -236,12 +248,18 @@ pour telecharger/utiliser l'app si besoin, et pose des questions pertinentes pou
 l'occasion se presente naturellement. Reste bref (2-4 phrases), chaleureux, en francais.
 Regarde l'historique de la conversation avant de repondre : ne redemande jamais une information deja donnee.
 
-Si la personne demande EXPLICITEMENT a parler a quelqu'un, un humain, un conseiller, un responsable, ou dit
-qu'elle veut qu'on l'appelle / la contacte directement, tu dois detecter cette intention. Transfere aussi si
-son acces est revoque ou son entreprise fermee et qu'elle a besoin d'aide que tu ne peux pas resoudre seul.
+TRANSFERT VERS UN HUMAIN - PROCESSUS EN DEUX TEMPS (ne transfere jamais directement au premier signal) :
+- Si la personne demande EXPLICITEMENT a parler a quelqu'un, un humain, un conseiller, un responsable (ou dit
+  qu'elle veut qu'on l'appelle/la contacte directement) pour la PREMIERE fois, ou si son acces est revoque ou
+  son entreprise fermee et qu'elle a besoin d'aide que tu ne peux pas resoudre seul : NE transfere PAS tout de
+  suite. Reponds en demandant confirmation, par exemple : "Voulez-vous que je vous mette en contact avec
+  quelqu'un de l'equipe ?". Mets "transfert": "propose" dans ce cas.
+- Si tu lui as DEJA pose cette question de confirmation dans un message precedent (regarde l'historique) ET
+  qu'elle confirme maintenant (oui, d'accord, s'il te plait, etc.), mets "transfert": "confirme".
+- Dans tous les autres cas, mets "transfert": "non".
 
 Reponds TOUJOURS en JSON strict de cette forme, sans aucun texte autour, sans balises markdown :
-{"reponse": "ton message ici", "transfert": true ou false}`
+{"reponse": "ton message ici", "transfert": "non" ou "propose" ou "confirme"}`
 }
 
 function attendre(ms) {
@@ -293,7 +311,7 @@ async function appellerGroq(systemPrompt, historique) {
   try {
     return JSON.parse(contenu)
   } catch {
-    return { reponse: contenu, transfert: false }
+    return { reponse: contenu, transfert: 'non' }
   }
 }
 
@@ -374,7 +392,7 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
 
   conv.history.push({ role: 'assistant', content: resultat.reponse })
 
-  if (resultat.transfert === true) {
+  if (resultat.transfert === 'confirme') {
     conv.transferred = true
     await notifierAdmin(sock, numero, conv.contexte, conv.history, numeroReel)
   }
