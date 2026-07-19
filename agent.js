@@ -63,6 +63,7 @@ async function recupererContexteParEmail(email) {
 }
 
 const REGEX_EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/
+const REGEX_TELEPHONE = /(?:\+?\d[\s.-]?){9,14}/
 
 const LIEN_APP = process.env.APP_DOWNLOAD_URL || ''
 
@@ -371,6 +372,25 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
       conv.contexte = { ...contexteParEmail, identite_verifiee: identiteVerifiee }
     }
     conv.emailConfirme = emailDetecte
+  }
+
+  // Si un numero de telephone est tape dans le texte (ex: "info 243997245614"), meme logique
+  // de recherche + verification que pour l'email
+  const telephoneDetecte = (texteRecu.match(REGEX_TELEPHONE)?.[0] || '').replace(/[^0-9]/g, '')
+  if (telephoneDetecte && telephoneDetecte.length >= 9 && conv.telephoneConfirme !== telephoneDetecte) {
+    const contexteParTelephone = await recupererContexte(telephoneDetecte)
+    if (contexteParTelephone) {
+      const numeroEnregistre = (
+        contexteParTelephone.utilisateur_beautycrm?.telephone ||
+        contexteParTelephone.inscription_formation?.telephone ||
+        ''
+      ).replace(/[^0-9]/g, '')
+      const numeroActuel = (numeroReel || numero || '').replace(/[^0-9]/g, '')
+      const identiteVerifiee = numeroEnregistre && numeroActuel && numeroEnregistre === numeroActuel
+
+      conv.contexte = { ...contexteParTelephone, identite_verifiee: identiteVerifiee }
+    }
+    conv.telephoneConfirme = telephoneDetecte
   }
 
   conv.history.push({ role: 'user', content: texteRecu })
