@@ -4,7 +4,7 @@ const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
 const { gererMessageEntrant } = require('./agent')
-const { traiterCommandeAdmin } = require('./commandesAdmin')
+const { traiterCommandeAdmin, estEnAttenteSondage, traiterReponseSondage } = require('./commandesAdmin')
 
 const PORT = process.env.PORT || 3001
 const SECRET = process.env.WHATSAPP_SECRET || 'change-me'
@@ -64,7 +64,7 @@ async function startSock() {
         // jamais transmise a l'agent IA (compare au numero LID ET au vrai numero via senderPn)
         if (numero === process.env.ADMIN_PHONE || numeroReel === process.env.ADMIN_PHONE || numero === process.env.ADMIN_LID) {
           if (texte.trim().startsWith('/')) {
-            const reponseCommande = await traiterCommandeAdmin(texte)
+            const reponseCommande = await traiterCommandeAdmin(texte, sock)
             if (reponseCommande) {
               await sock.sendMessage(msg.key.remoteJid, { text: reponseCommande })
             } else {
@@ -72,6 +72,13 @@ async function startSock() {
             }
           }
           continue // les messages de l'admin ne passent jamais par l'agent IA
+        }
+
+        // Si cette personne a un sondage en attente de reponse, on traite ce message comme une reponse
+        // (jamais transmis a l'agent IA)
+        if (estEnAttenteSondage(numero)) {
+          await traiterReponseSondage(sock, numero, msg.key.remoteJid, msg.pushName, texte)
+          continue
         }
 
         // Detection d'un message venant d'un clic sur "Envoyer un message" Facebook/Instagram

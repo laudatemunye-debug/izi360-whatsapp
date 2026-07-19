@@ -3,6 +3,9 @@ const { reprendreConversation } = require('./agent')
 
 const API = process.env.BACKEND_API_URL
 const HEADERS = { Authorization: `Bearer ${process.env.WHATSAPP_SECRET}` }
+const DELAI_ENTRE_ENVOIS_MS = 12000 // 5 messages par minute max
+
+const sondagesEnAttente = new Map()
 
 const AIDE_TEXTE = `📋 *Commandes disponibles*
 
@@ -13,10 +16,87 @@ const AIDE_TEXTE = `📋 *Commandes disponibles*
 /user mois - inscriptions du mois
 /user total - nombre total d'utilisateurs
 /inscrits <nom formation> - liste des inscrits a une formation
+/sondage <type> <message> - envoie un sondage a tous les utilisateurs
+/resultat sondage - resultats du dernier sondage envoye
 /aide - affiche ce message`
+
+function attendre(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 function formatDate(d) {
   return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function estEnAttenteSondage(numero) {
+  return sondagesEnAttente.get(numero) || null
+}
+
+async function traiterReponseSondage(sock, numero, remoteJid, nom, texteReponse) {
+  const sondageId = sondagesEnAttente.get(numero)
+  try {
+    await axios.post(`${API}/formations/admin/sondage-reponse`, {
+      sondage_id: sondageId,
+      telephone: numero,
+      nom: nom || '',
+      reponse: texteReponse,
+    }, { headers: HEADERS, timeout: 10000 })
+  } catch (err) {
+    console.error('Erreur enregistrement reponse sondage:', err.message)
+  }
+  sondagesEnAttente.delete(numero)
+  await sock.sendMessage(remoteJid, { text: `Merci pour votre reponse ! 🙏` })
+}
+
+async function envoyerSondageEnArrierePlan(sock, sondageId, message, destinataires) {
+  console.log(`Debut envoi sondage ${sondageId} a ${destinataires.length} destinataires`)
+  for (const dest of destinataires) {
+    const numero = (dest.telephone || '').replace(/[^0-9]/g, '')
+    if (!numero) continue
+    try {
+      await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: message })
+      sondagesEnAttente.set(numero, sondageId)
+    } catch (err) {
+      console.error(`Erreur envoi sondage a ${numero}:`, err.message)
+    }
+    await attendre(DELAI_ENTRE_ENVOIS_MS)
+  }
+  console.log(`Sondage ${sondageId} - envoi termine`)
+}
+
+async function commandeSondage(sock, type, messageBrut) {
+  const message = `📊 *Sondage — ${type}*\n\n${messageBrut}\n\n_Repondez directement a ce message._`
+  try {
+    const res = await axios.post(`${API}/formations/admin/sondage`, { type, message }, { headers: HEADERS, timeout: 15000 })
+    const { sondage_id, destinataires } = res.data
+
+    envoyerSondageEnArrierePlan(sock, sondage_id, message, destinataires).catch(err =>
+      console.error('Erreur envoi sondage en arriere-plan:', err.message)
+    )
+
+    const dureeMin = Math.ceil((destinataires.length * DELAI_ENTRE_ENVOIS_MS) / 60000)
+    return `📊 Sondage "${type}" (id ${sondage_id}) en cours d'envoi a ${destinataires.length} personnes.\nDuree estimee : ~${dureeMin} minutes.\nTape /resultat sondage plus tard pour voir les reponses.`
+  } catch (err) {
+    return `Erreur lors de la creation du sondage : ${err.message}`
+  }
+}
+
+async function commandeResultatSondage() {
+  try {
+    const dernierRes = await axios.get(`${API}/formations/admin/sondage-dernier`, { headers: HEADERS, timeout: 10000 })
+    const sondage = dernierRes.data
+
+    const resultatRes = await axios.get(`${API}/formations/admin/sondage-resultat/${sondage.id}`, { headers: HEADERS, timeout: 10000 })
+    const d = resultatRes.data
+
+    let texte = `📊 *Resultats — ${sondage.type}* (${formatDate(sondage.created_at)})\n${d.nombre_reponses} reponse(s) recue(s)\n\n`
+    texte += d.reponses.slice(0, 25).map(r => `• *${r.nom || r.telephone}* : ${r.reponse}`).join('\n')
+    if (d.reponses.length > 25) texte += `\n… et ${d.reponses.length - 25} de plus`
+    return texte
+  } catch (err) {
+    if (err.response?.status === 404) return `Aucun sondage trouve.`
+    return `Erreur lors de la recherche : ${err.message}`
+  }
 }
 
 async function commandeInfoEmail(email) {
@@ -73,8 +153,7 @@ async function commandeInscritsFormation(recherche) {
   }
 }
 
-// Retourne le texte de reponse si la commande est reconnue, sinon null (pas une commande admin connue)
-async function traiterCommandeAdmin(texte) {
+async function traiterCommandeAdmin(texte, sock) {
   const t = texte.trim()
 
   if (/^\/aide$/i.test(t)) return AIDE_TEXTE
@@ -88,7 +167,7 @@ async function traiterCommandeAdmin(texte) {
     return ok ? `✅ L'IA reprend la conversation avec ${cible}.` : `Aucune conversation active trouvee pour ${cible}.`
   }
 
-  m = t.match(/^\/info\s+email\s+(\S+)/i)
+  m = t.match(/^\/info\s+(?:email|mail)\s+(\S+)/i)
   if (m) return await commandeInfoEmail(m[1])
 
   m = t.match(/^\/user\s+(jour|semaine|mois|total)/i)
@@ -97,7 +176,12 @@ async function traiterCommandeAdmin(texte) {
   m = t.match(/^\/inscrits\s+(.+)/i)
   if (m) return await commandeInscritsFormation(m[1].trim())
 
-  return null // pas une commande reconnue
+  m = t.match(/^\/sondage\s+(\S+)\s+([\s\S]+)/i)
+  if (m) return await commandeSondage(sock, m[1], m[2].trim())
+
+  if (/^\/resultat\s+sondage$/i.test(t)) return await commandeResultatSondage()
+
+  return null
 }
 
-module.exports = { traiterCommandeAdmin }
+module.exports = { traiterCommandeAdmin, estEnAttenteSondage, traiterReponseSondage }
