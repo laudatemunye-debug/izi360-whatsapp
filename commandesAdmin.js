@@ -18,6 +18,7 @@ const AIDE_TEXTE = `📋 *Commandes disponibles*
 /inscrits <nom formation> - liste des inscrits a une formation
 /sondage <type> <message> - envoie un sondage a tous les utilisateurs
 /resultat sondage - resultats du dernier sondage envoye
+/relancer sondage <id> - relance vers ceux qui n'ont pas repondu
 /aide - affiche ce message`
 
 function attendre(ms) {
@@ -78,6 +79,27 @@ async function commandeSondage(sock, type, messageBrut) {
     return `📊 Sondage "${type}" (id ${sondage_id}) en cours d'envoi a ${destinataires.length} personnes.\nDuree estimee : ~${dureeMin} minutes.\nTape /resultat sondage plus tard pour voir les reponses.`
   } catch (err) {
     return `Erreur lors de la creation du sondage : ${err.message}`
+  }
+}
+
+async function commandeRelancerSondage(sock, sondageId) {
+  try {
+    const res = await axios.get(`${API}/formations/admin/sondage-destinataires-restants/${sondageId}`, { headers: HEADERS, timeout: 15000 })
+    const { sondage, destinataires } = res.data
+
+    if (destinataires.length === 0) {
+      return `Tout le monde a deja repondu au sondage ${sondageId}, rien a relancer.`
+    }
+
+    envoyerSondageEnArrierePlan(sock, sondage.id, sondage.message, destinataires).catch(err =>
+      console.error('Erreur relance sondage en arriere-plan:', err.message)
+    )
+
+    const dureeMin = Math.ceil((destinataires.length * DELAI_ENTRE_ENVOIS_MS) / 60000)
+    return `🔄 Relance du sondage ${sondageId} vers ${destinataires.length} personne(s) n'ayant pas encore repondu.\nDuree estimee : ~${dureeMin} minutes.`
+  } catch (err) {
+    if (err.response?.status === 404) return `Sondage ${sondageId} introuvable.`
+    return `Erreur lors de la relance : ${err.message}`
   }
 }
 
@@ -180,6 +202,9 @@ async function traiterCommandeAdmin(texte, sock) {
   if (m) return await commandeSondage(sock, m[1], m[2].trim())
 
   if (/^\/resultat\s+sondage$/i.test(t)) return await commandeResultatSondage()
+
+  m = t.match(/^\/relancer\s+sondage\s+(\d+)/i)
+  if (m) return await commandeRelancerSondage(sock, m[1])
 
   return null
 }
