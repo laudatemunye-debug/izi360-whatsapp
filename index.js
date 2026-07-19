@@ -3,7 +3,8 @@ const express = require('express')
 const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
-const { gererMessageEntrant, reprendreConversation } = require('./agent')
+const { gererMessageEntrant } = require('./agent')
+const { traiterCommandeAdmin } = require('./commandesAdmin')
 
 const PORT = process.env.PORT || 3001
 const SECRET = process.env.WHATSAPP_SECRET || 'change-me'
@@ -59,16 +60,16 @@ async function startSock() {
         // Tentative de recuperation du vrai numero WhatsApp meme quand remoteJid est un LID (@lid)
         const numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
 
-        // Commande admin : /reprendre <numero> redonne la main a l'IA sur ce numero
-        // (compare au numero LID ET au vrai numero recupere via senderPn)
+        // Commandes admin : toute commande /xxx envoyee par l'admin est traitee ici,
+        // jamais transmise a l'agent IA (compare au numero LID ET au vrai numero via senderPn)
         if (numero === process.env.ADMIN_PHONE || numeroReel === process.env.ADMIN_PHONE || numero === process.env.ADMIN_LID) {
-          const match = texte.trim().match(/^\/reprendre\s+([\d\s]+)/i)
-          if (match) {
-            const cible = match[1].replace(/[^0-9]/g, '')
-            const ok = reprendreConversation(cible)
-            await sock.sendMessage(msg.key.remoteJid, {
-              text: ok ? `✅ L'IA reprend la conversation avec ${cible}.` : `Aucune conversation active trouvee pour ${cible}.`
-            })
+          if (texte.trim().startsWith('/')) {
+            const reponseCommande = await traiterCommandeAdmin(texte)
+            if (reponseCommande) {
+              await sock.sendMessage(msg.key.remoteJid, { text: reponseCommande })
+            } else {
+              await sock.sendMessage(msg.key.remoteJid, { text: `Commande inconnue. Tape /aide pour la liste.` })
+            }
           }
           continue // les messages de l'admin ne passent jamais par l'agent IA
         }
