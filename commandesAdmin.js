@@ -31,8 +31,16 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function estEnAttenteSondage(numero) {
-  return sondagesEnAttente.get(numero) || null
+async function estEnAttenteSondage(numero) {
+  // Verification en memoire d'abord (rapide), puis en base (survit aux redemarrages)
+  if (sondagesEnAttente.has(numero)) return sondagesEnAttente.get(numero)
+  try {
+    const res = await axios.get(`${API}/formations/admin/sondage-en-attente/${numero}`, { headers: HEADERS, timeout: 8000 })
+    return res.data.en_attente ? res.data.sondage_id : null
+  } catch (err) {
+    console.error('Erreur verification sondage en attente:', err.message)
+    return null
+  }
 }
 
 async function traiterReponseSondage(sock, numero, remoteJid, nom, texteReponse) {
@@ -96,6 +104,11 @@ async function envoyerSondageEnArrierePlan(sock, sondageId, variantes, destinata
       const texteAEnvoyer = listeVariantes[index % listeVariantes.length]
       await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: texteAEnvoyer })
       sondagesEnAttente.set(numero, sondageId)
+      try {
+        await axios.post(`${API}/formations/admin/sondage-marquer-envoye`, { sondage_id: sondageId, telephone: numero }, { headers: HEADERS, timeout: 8000 })
+      } catch (err) {
+        console.error(`Erreur marquage envoye pour ${numero}:`, err.message)
+      }
       succes++
     } catch (err) {
       console.error(`Erreur envoi sondage a ${numero}:`, err.message)

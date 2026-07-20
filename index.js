@@ -76,7 +76,7 @@ async function startSock() {
 
         // Si cette personne a un sondage en attente de reponse, on traite ce message comme une reponse
         // (jamais transmis a l'agent IA)
-        if (estEnAttenteSondage(numero)) {
+        if (await estEnAttenteSondage(numero)) {
           await traiterReponseSondage(sock, numero, msg.key.remoteJid, msg.pushName, texte)
           continue
         }
