@@ -21,6 +21,8 @@ const AIDE_TEXTE = `📋 *Commandes disponibles*
 /relancer sondage <id> - relance vers ceux qui n'ont pas repondu
 /notifier <message> - annonce a tous
 /notifier sauf <num1,num2> <message> - annonce a tous sauf ces numeros
+/contact <numero> <message> - contacte un numero precis
+/contact inscrit jour - message de bienvenue personnalise aux inscrits du jour
 /aide - affiche ce message`
 
 function attendre(ms) {
@@ -88,6 +90,81 @@ Reponds UNIQUEMENT en JSON strict, sans texte autour : {"variantes": ["...", "..
   } catch (err) {
     console.error('Erreur generation variantes:', err.message)
     return [messageBase] // repli : on envoie le message original tel quel a tout le monde
+  }
+}
+
+async function genererMessageBienvenue(nom) {
+  try {
+    const prompt = `Genere un message de bienvenue WhatsApp chaleureux en francais pour "${nom}", qui vient de
+creer un compte BeautyCRM aujourd'hui. Presente-toi comme l'assistant automatique d'IZI360/BeautyCRM.
+Explique tres brievement (2-3 phrases) qu'elle peut gerer ses clients, ventes, stock et facturation dans
+l'application. Propose-lui de repondre a ses questions pour bien demarrer. Reste concis (4-5 phrases max),
+poli, encourageant. Reponds UNIQUEMENT avec le texte du message, sans guillemets, sans JSON.`
+
+    const res = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 300,
+      },
+      { headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 15000 }
+    )
+    return res.data.choices[0].message.content.trim()
+  } catch (err) {
+    console.error('Erreur generation message bienvenue:', err.message)
+    return `Bonjour ${nom} ! 👋 Bienvenue sur BeautyCRM. Je suis l'assistant automatique d'IZI360, dispo pour repondre a vos questions et vous aider a demarrer (gestion clients, ventes, stock, facturation).`
+  }
+}
+
+async function commandeContactInscritsJour(sock) {
+  try {
+    const res = await axios.get(`${API}/formations/admin/stats-utilisateurs?periode=jour`, { headers: HEADERS, timeout: 10000 })
+    const liste = res.data.liste || []
+
+    if (liste.length === 0) return `Aucune inscription aujourd'hui, rien a envoyer.`
+
+    ;(async () => {
+      let succes = 0
+      let echecs = 0
+      for (const u of liste) {
+        const numero = (u.telephone || '').replace(/[^0-9]/g, '')
+        if (!numero) continue
+        try {
+          const messageBienvenue = await genererMessageBienvenue(u.nom)
+          await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: messageBienvenue })
+          succes++
+        } catch (err) {
+          console.error(`Erreur contact inscrit ${numero}:`, err.message)
+          echecs++
+        }
+        await attendre(DELAI_ENTRE_ENVOIS_MS)
+      }
+      console.log(`Contact inscrits du jour termine (${succes} succes, ${echecs} echecs)`)
+      try {
+        await sock.sendMessage(`${process.env.ADMIN_PHONE}@s.whatsapp.net`, {
+          text: `✅ Contact inscrits du jour termine.\n${succes} message(s) envoye(s), ${echecs} echec(s) sur ${liste.length} destinataire(s).`
+        })
+      } catch (err) {
+        console.error('Erreur notification fin contact:', err.message)
+      }
+    })().catch(err => console.error('Erreur contact inscrits jour en arriere-plan:', err.message))
+
+    const dureeMin = Math.ceil((liste.length * DELAI_ENTRE_ENVOIS_MS) / 60000)
+    return `👋 Envoi d'un message de bienvenue personnalise a ${liste.length} inscrit(s) du jour.\nDuree estimee : ~${dureeMin} minutes.`
+  } catch (err) {
+    return `Erreur : ${err.message}`
+  }
+}
+
+async function commandeContactNumero(sock, numero, message) {
+  const num = numero.replace(/[^0-9]/g, '')
+  try {
+    await sock.sendMessage(`${num}@s.whatsapp.net`, { text: message })
+    return `✅ Message envoye a ${num}.`
+  } catch (err) {
+    return `Erreur lors de l'envoi a ${num} : ${err.message}`
   }
 }
 
