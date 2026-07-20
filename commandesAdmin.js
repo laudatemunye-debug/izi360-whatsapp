@@ -87,6 +87,8 @@ async function envoyerSondageEnArrierePlan(sock, sondageId, variantes, destinata
   const listeVariantes = Array.isArray(variantes) ? variantes : [variantes]
   console.log(`Debut envoi sondage ${sondageId} a ${destinataires.length} destinataires (${listeVariantes.length} variante(s))`)
   let index = 0
+  let succes = 0
+  let echecs = 0
   for (const dest of destinataires) {
     const numero = (dest.telephone || '').replace(/[^0-9]/g, '')
     if (!numero) continue
@@ -94,13 +96,22 @@ async function envoyerSondageEnArrierePlan(sock, sondageId, variantes, destinata
       const texteAEnvoyer = listeVariantes[index % listeVariantes.length]
       await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: texteAEnvoyer })
       sondagesEnAttente.set(numero, sondageId)
+      succes++
     } catch (err) {
       console.error(`Erreur envoi sondage a ${numero}:`, err.message)
+      echecs++
     }
     index++
     await attendre(DELAI_ENTRE_ENVOIS_MS)
   }
-  console.log(`Sondage ${sondageId} - envoi termine`)
+  console.log(`Sondage ${sondageId} - envoi termine (${succes} succes, ${echecs} echecs)`)
+  try {
+    await sock.sendMessage(`${process.env.ADMIN_PHONE}@s.whatsapp.net`, {
+      text: `✅ Sondage ${sondageId} - envoi termine.\n${succes} message(s) envoye(s) avec succes, ${echecs} echec(s) sur ${destinataires.length} destinataire(s).`
+    })
+  } catch (err) {
+    console.error('Erreur notification fin envoi:', err.message)
+  }
 }
 
 async function commandeSondage(sock, type, messageBrut) {
@@ -148,18 +159,29 @@ async function commandeRelancerSondage(sock, sondageId) {
 async function envoyerAnnonceEnArrierePlan(sock, variantes, destinataires) {
   console.log(`Debut envoi annonce a ${destinataires.length} destinataires (${variantes.length} variante(s))`)
   let index = 0
+  let succes = 0
+  let echecs = 0
   for (const dest of destinataires) {
     const numero = (dest.telephone || '').replace(/[^0-9]/g, '')
     if (!numero) continue
     try {
       await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: variantes[index % variantes.length] })
+      succes++
     } catch (err) {
       console.error(`Erreur envoi annonce a ${numero}:`, err.message)
+      echecs++
     }
     index++
     await attendre(DELAI_ENTRE_ENVOIS_MS)
   }
-  console.log(`Annonce - envoi termine`)
+  console.log(`Annonce - envoi termine (${succes} succes, ${echecs} echecs)`)
+  try {
+    await sock.sendMessage(`${process.env.ADMIN_PHONE}@s.whatsapp.net`, {
+      text: `✅ Annonce - envoi termine.\n${succes} message(s) envoye(s) avec succes, ${echecs} echec(s) sur ${destinataires.length} destinataire(s).`
+    })
+  } catch (err) {
+    console.error('Erreur notification fin envoi:', err.message)
+  }
 }
 
 async function commandeNotifier(sock, message, exclureListe) {
