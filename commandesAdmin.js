@@ -19,6 +19,8 @@ const AIDE_TEXTE = `📋 *Commandes disponibles*
 /sondage <type> <message> - envoie un sondage a tous les utilisateurs
 /resultat sondage - resultats du dernier sondage envoye
 /relancer sondage <id> - relance vers ceux qui n'ont pas repondu
+/notifier <message> - annonce a tous
+/notifier sauf <num1,num2> <message> - annonce a tous sauf ces numeros
 /aide - affiche ce message`
 
 function attendre(ms) {
@@ -49,17 +51,53 @@ async function traiterReponseSondage(sock, numero, remoteJid, nom, texteReponse)
   await sock.sendMessage(remoteJid, { text: `Merci pour votre reponse ! 🙏` })
 }
 
-async function envoyerSondageEnArrierePlan(sock, sondageId, message, destinataires) {
-  console.log(`Debut envoi sondage ${sondageId} a ${destinataires.length} destinataires`)
+async function genererVariantes(messageBase, nombre = 4) {
+  try {
+    const prompt = `Genere ${nombre} reformulations differentes du message WhatsApp suivant. Garde EXACTEMENT
+le meme sens, les memes informations importantes, et tout lien ou instruction qu'il contient mot pour mot.
+Change seulement la formulation/les mots pour que les messages ne se ressemblent pas trop (evite de paraitre
+comme un envoi automatise identique a tous). Reste dans le meme ton (poli, francais).
+
+Message original :
+"${messageBase}"
+
+Reponds UNIQUEMENT en JSON strict, sans texte autour : {"variantes": ["...", "...", "...", "..."]}`
+
+    const res = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+        max_tokens: 800,
+      },
+      { headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 15000 }
+    )
+    const data = JSON.parse(res.data.choices[0].message.content)
+    if (Array.isArray(data.variantes) && data.variantes.length > 0) return data.variantes
+    return [messageBase]
+  } catch (err) {
+    console.error('Erreur generation variantes:', err.message)
+    return [messageBase] // repli : on envoie le message original tel quel a tout le monde
+  }
+}
+
+async function envoyerSondageEnArrierePlan(sock, sondageId, variantes, destinataires) {
+  const listeVariantes = Array.isArray(variantes) ? variantes : [variantes]
+  console.log(`Debut envoi sondage ${sondageId} a ${destinataires.length} destinataires (${listeVariantes.length} variante(s))`)
+  let index = 0
   for (const dest of destinataires) {
     const numero = (dest.telephone || '').replace(/[^0-9]/g, '')
     if (!numero) continue
     try {
-      await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: message })
+      const texteAEnvoyer = listeVariantes[index % listeVariantes.length]
+      await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: texteAEnvoyer })
       sondagesEnAttente.set(numero, sondageId)
     } catch (err) {
       console.error(`Erreur envoi sondage a ${numero}:`, err.message)
     }
+    index++
     await attendre(DELAI_ENTRE_ENVOIS_MS)
   }
   console.log(`Sondage ${sondageId} - envoi termine`)
@@ -71,7 +109,9 @@ async function commandeSondage(sock, type, messageBrut) {
     const res = await axios.post(`${API}/formations/admin/sondage`, { type, message }, { headers: HEADERS, timeout: 15000 })
     const { sondage_id, destinataires } = res.data
 
-    envoyerSondageEnArrierePlan(sock, sondage_id, message, destinataires).catch(err =>
+    const variantes = await genererVariantes(message)
+
+    envoyerSondageEnArrierePlan(sock, sondage_id, variantes, destinataires).catch(err =>
       console.error('Erreur envoi sondage en arriere-plan:', err.message)
     )
 
@@ -91,7 +131,9 @@ async function commandeRelancerSondage(sock, sondageId) {
       return `Tout le monde a deja repondu au sondage ${sondageId}, rien a relancer.`
     }
 
-    envoyerSondageEnArrierePlan(sock, sondage.id, sondage.message, destinataires).catch(err =>
+    const variantes = await genererVariantes(sondage.message)
+
+    envoyerSondageEnArrierePlan(sock, sondage.id, variantes, destinataires).catch(err =>
       console.error('Erreur relance sondage en arriere-plan:', err.message)
     )
 
@@ -100,6 +142,44 @@ async function commandeRelancerSondage(sock, sondageId) {
   } catch (err) {
     if (err.response?.status === 404) return `Sondage ${sondageId} introuvable.`
     return `Erreur lors de la relance : ${err.message}`
+  }
+}
+
+async function envoyerAnnonceEnArrierePlan(sock, variantes, destinataires) {
+  console.log(`Debut envoi annonce a ${destinataires.length} destinataires (${variantes.length} variante(s))`)
+  let index = 0
+  for (const dest of destinataires) {
+    const numero = (dest.telephone || '').replace(/[^0-9]/g, '')
+    if (!numero) continue
+    try {
+      await sock.sendMessage(`${numero}@s.whatsapp.net`, { text: variantes[index % variantes.length] })
+    } catch (err) {
+      console.error(`Erreur envoi annonce a ${numero}:`, err.message)
+    }
+    index++
+    await attendre(DELAI_ENTRE_ENVOIS_MS)
+  }
+  console.log(`Annonce - envoi termine`)
+}
+
+async function commandeNotifier(sock, message, exclureListe) {
+  try {
+    const exclureParam = (exclureListe || []).join(',')
+    const res = await axios.get(`${API}/formations/admin/tous-destinataires?exclure=${exclureParam}`, { headers: HEADERS, timeout: 15000 })
+    const { destinataires } = res.data
+
+    if (destinataires.length === 0) return `Aucun destinataire trouve.`
+
+    const variantes = await genererVariantes(message)
+
+    envoyerAnnonceEnArrierePlan(sock, variantes, destinataires).catch(err =>
+      console.error('Erreur envoi annonce en arriere-plan:', err.message)
+    )
+
+    const dureeMin = Math.ceil((destinataires.length * DELAI_ENTRE_ENVOIS_MS) / 60000)
+    return `📢 Annonce en cours d'envoi a ${destinataires.length} personne(s)${exclureListe?.length ? ` (${exclureListe.length} exclue(s))` : ''}.\nDuree estimee : ~${dureeMin} minutes.`
+  } catch (err) {
+    return `Erreur lors de l'envoi de l'annonce : ${err.message}`
   }
 }
 
@@ -205,6 +285,15 @@ async function traiterCommandeAdmin(texte, sock) {
 
   m = t.match(/^\/relancer\s+sondage\s+(\d+)/i)
   if (m) return await commandeRelancerSondage(sock, m[1])
+
+  m = t.match(/^\/notifier\s+sauf\s+([\d,\s]+)\s+([\s\S]+)/i)
+  if (m) {
+    const exclureListe = m[1].split(',').map(n => n.replace(/[^0-9]/g, '')).filter(Boolean)
+    return await commandeNotifier(sock, m[2].trim(), exclureListe)
+  }
+
+  m = t.match(/^\/notifier\s+([\s\S]+)/i)
+  if (m) return await commandeNotifier(sock, m[1].trim(), [])
 
   return null
 }
