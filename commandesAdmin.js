@@ -407,6 +407,11 @@ async function traiterCommandeAdmin(texte, sock) {
   m = t.match(/^\/notifier\s+([\s\S]+)/i)
   if (m) return await commandeNotifier(sock, m[1].trim(), [])
 
+  if (/^\/contact\s+inscrit\s+jour$/i.test(t)) return await commandeContactInscritsJour(sock)
+
+  m = t.match(/^\/contact\s+(\d[\d\s]*)\s+([\s\S]+)/i)
+  if (m) return await commandeContactNumero(sock, m[1], m[2].trim())
+
   return null
 }
 
