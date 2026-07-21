@@ -1,4 +1,5 @@
 const axios = require('axios')
+const { ajouterLigneConversation } = require('./googleSheets')
 
 // Memoire de conversation en RAM : phone -> { history: [], transferred: bool, contexte: object|null }
 const conversations = new Map()
@@ -402,6 +403,7 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
   }
 
   conv.history.push({ role: 'user', content: texteRecu })
+  ajouterLigneConversation(numero, 'Utilisateur', texteRecu).catch(() => {})
   if (conv.history.length > MAX_HISTORY) {
     const nbAEvincer = conv.history.length - MAX_HISTORY
     const messagesAResumer = conv.history.slice(0, nbAEvincer)
@@ -419,6 +421,7 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
   }
 
   conv.history.push({ role: 'assistant', content: resultat.reponse })
+  ajouterLigneConversation(numero, 'IA', resultat.reponse).catch(() => {})
 
   if (resultat.transfert === 'confirme') {
     conv.transferred = true
