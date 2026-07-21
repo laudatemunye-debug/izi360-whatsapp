@@ -431,6 +431,22 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
   return resultat.reponse
 }
 
+function enregistrerMessageManuel(numero, texte) {
+  let conv = conversations.get(numero)
+  if (!conv) {
+    conv = { history: [], transferred: false, contexte: null }
+    conversations.set(numero, conv)
+  }
+
+  // Evite de dupliquer un message que l'IA vient elle-meme d'envoyer
+  const dernier = conv.history[conv.history.length - 1]
+  if (dernier && dernier.role === 'assistant' && dernier.content === texte) return
+
+  conv.history.push({ role: 'assistant', content: texte })
+  if (conv.history.length > MAX_HISTORY) conv.history = conv.history.slice(-MAX_HISTORY)
+  ajouterLigneConversation(numero, 'Admin (manuel)', texte).catch(() => {})
+}
+
 function reprendreConversation(numero) {
   const conv = conversations.get(numero)
   if (!conv) return false
@@ -438,4 +454,4 @@ function reprendreConversation(numero) {
   return true
 }
 
-module.exports = { gererMessageEntrant, reprendreConversation }
+module.exports = { gererMessageEntrant, reprendreConversation, enregistrerMessageManuel }

@@ -3,7 +3,7 @@ const express = require('express')
 const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
-const { gererMessageEntrant } = require('./agent')
+const { gererMessageEntrant, enregistrerMessageManuel } = require('./agent')
 const { traiterCommandeAdmin, estEnAttenteSondage, traiterReponseSondage } = require('./commandesAdmin')
 
 const PORT = process.env.PORT || 3001
@@ -49,13 +49,19 @@ async function startSock() {
     if (type !== 'notify') return
     for (const msg of messages) {
       try {
-        if (msg.key.fromMe) continue
         if (msg.key.remoteJid?.endsWith('@g.us')) continue // ignore les groupes
 
         const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text
         if (!texte) continue
 
         const numero = msg.key.remoteJid.split('@')[0]
+
+        // Message tape manuellement par l'admin directement dans WhatsApp (pas via l'IA) :
+        // on le memorise pour le contexte, sans generer de reponse ni traiter de commande
+        if (msg.key.fromMe) {
+          enregistrerMessageManuel(numero, texte)
+          continue
+        }
 
         // Tentative de recuperation du vrai numero WhatsApp meme quand remoteJid est un LID (@lid)
         const numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
