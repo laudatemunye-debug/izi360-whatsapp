@@ -50,6 +50,7 @@ async function startSock() {
     for (const msg of messages) {
       try {
         if (msg.key.remoteJid?.endsWith('@g.us')) continue // ignore les groupes
+        if (msg.key.remoteJid === 'status@broadcast') continue // ignore les statuts WhatsApp
 
         const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text
         if (!texte) continue
