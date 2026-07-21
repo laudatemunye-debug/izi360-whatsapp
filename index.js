@@ -65,7 +65,17 @@ async function startSock() {
         }
 
         // Tentative de recuperation du vrai numero WhatsApp meme quand remoteJid est un LID (@lid)
-        const numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
+        let numeroReel = (msg.key.senderPn || '').replace(/[^0-9]/g, '') || null
+
+        // Si toujours pas trouve et que c'est un LID, tente le store interne de mapping de Baileys
+        if (!numeroReel && msg.key.remoteJid?.endsWith('@lid')) {
+          try {
+            const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(msg.key.remoteJid)
+            if (pn) numeroReel = pn.replace(/[^0-9]/g, '') || null
+          } catch (err) {
+            // pas grave, on continue sans le vrai numero
+          }
+        }
 
         // Commandes admin : toute commande /xxx envoyee par l'admin est traitee ici,
         // jamais transmise a l'agent IA (compare au numero LID ET au vrai numero via senderPn)
