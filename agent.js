@@ -197,8 +197,17 @@ TRANSFERT VERS UN HUMAIN - PROCESSUS EN DEUX TEMPS (ne transfere jamais directem
 - Si tu lui as DEJA pose cette question de confirmation dans un message precedent (regarde l'historique) ET
   qu'elle confirme maintenant (oui, d'accord, s'il te plait, etc.), mets "transfert": "confirme".
 - Dans tous les autres cas, mets "transfert": "non".
+
+FILTRE ANTI-SPAM (important) : beaucoup de messages recus sont des transferts/partages automatiques
+sans rapport avec BeautyCRM ou la formation (articles de presse, liens de reseaux sociaux, videos, chaines
+de messages, actualites politiques ou sportives, etc.), souvent envoyes par des comptes ou canaux automatises.
+Si le message recu n'a AUCUN rapport avec BeautyCRM, l'application, une formation, ou une vraie question
+commerciale/personnelle adressee a toi : mets "pertinent": false et laisse "reponse" vide (""). Dans ce cas
+tu ne dois RIEN envoyer. Si tu as le moindre doute ou si la personne pose une vraie question, meme vague,
+mets "pertinent": true et reponds normalement.
+
 Reponds TOUJOURS en JSON strict de cette forme, sans aucun texte autour :
-{"reponse": "ton message ici", "transfert": "non" ou "propose" ou "confirme"}`
+{"reponse": "ton message ici", "transfert": "non" ou "propose" ou "confirme", "pertinent": true ou false}`
   }
 
   let blocFormation = ''
@@ -268,8 +277,16 @@ TRANSFERT VERS UN HUMAIN - PROCESSUS EN DEUX TEMPS (ne transfere jamais directem
   qu'elle confirme maintenant (oui, d'accord, s'il te plait, etc.), mets "transfert": "confirme".
 - Dans tous les autres cas, mets "transfert": "non".
 
+FILTRE ANTI-SPAM (important) : beaucoup de messages recus sont des transferts/partages automatiques
+sans rapport avec BeautyCRM ou la formation (articles de presse, liens de reseaux sociaux, videos, chaines
+de messages, actualites politiques ou sportives, etc.), souvent envoyes par des comptes ou canaux automatises.
+Si le message recu n'a AUCUN rapport avec BeautyCRM, l'application, une formation, ou une vraie question
+commerciale/personnelle adressee a toi : mets "pertinent": false et laisse "reponse" vide (""). Dans ce cas
+tu ne dois RIEN envoyer. Si tu as le moindre doute ou si la personne pose une vraie question, meme vague,
+mets "pertinent": true et reponds normalement.
+
 Reponds TOUJOURS en JSON strict de cette forme, sans aucun texte autour, sans balises markdown :
-{"reponse": "ton message ici", "transfert": "non" ou "propose" ou "confirme"}`
+{"reponse": "ton message ici", "transfert": "non" ou "propose" ou "confirme", "pertinent": true ou false}`
 }
 
 function attendre(ms) {
@@ -420,6 +437,12 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
     return "Desole, j'ai un souci technique en ce moment. Reessaie dans un instant."
   }
 
+  // Message non pertinent (spam/contenu transfere sans rapport) : on ne repond rien
+  if (resultat.pertinent === false) {
+    ajouterLigneConversation(numero, 'IA (ignore - spam)', '(pas de reponse envoyee)').catch(() => {})
+    return null
+  }
+
   conv.history.push({ role: 'assistant', content: resultat.reponse })
   ajouterLigneConversation(numero, 'IA', resultat.reponse).catch(() => {})
 
@@ -465,4 +488,25 @@ function reprendreConversation(numero) {
   return true
 }
 
-module.exports = { gererMessageEntrant, reprendreConversation, enregistrerMessageManuel, arreterConversation }
+function compterTransferts() {
+  let count = 0
+  for (const conv of conversations.values()) {
+    if (conv.transferred) count++
+  }
+  return count
+}
+
+function obtenirHistorique(numero) {
+  const conv = conversations.get(numero)
+  if (!conv) return null
+  return conv.history
+}
+
+module.exports = {
+  gererMessageEntrant,
+  reprendreConversation,
+  enregistrerMessageManuel,
+  arreterConversation,
+  compterTransferts,
+  obtenirHistorique,
+}

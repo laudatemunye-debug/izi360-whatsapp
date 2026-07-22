@@ -1,5 +1,5 @@
 const axios = require('axios')
-const { reprendreConversation, arreterConversation } = require('./agent')
+const { reprendreConversation, arreterConversation, compterTransferts, obtenirHistorique } = require('./agent')
 
 const API = process.env.BACKEND_API_URL
 const HEADERS = { Authorization: `Bearer ${process.env.WHATSAPP_SECRET}` }
@@ -25,6 +25,11 @@ const AIDE_TEXTE = `📋 *Commandes disponibles*
 /contact <numero> <message> - contacte un numero precis
 /contact inscrit jour - message de bienvenue personnalise aux inscrits du jour
 /contact inscrit JJ/MM/AAAA - idem pour une date precise
+/stats - resume rapide
+/historique <numero> - derniers echanges en memoire avec ce numero
+/desinscrire <numero> - exclut definitivement des sondages/annonces
+/employe revoquer <email> - revoque l'acces d'un employe BeautyCRM
+/employe reactiver <email> - reactive l'acces d'un employe
 /aide - affiche ce message`
 
 function attendre(ms) {
@@ -368,6 +373,46 @@ async function commandeInscritsFormation(recherche) {
   } catch (err) {
     if (err.response?.status === 404) return `Aucune formation trouvee pour "${recherche}".`
     return `Erreur lors de la recherche : ${err.message}`
+  }
+}
+
+async function commandeStats() {
+  try {
+    const res = await axios.get(`${API}/formations/admin/stats-utilisateurs?periode=jour`, { headers: HEADERS, timeout: 10000 })
+    const d = res.data
+    const transferts = compterTransferts()
+    return `📊 *Stats rapides*\n\nTotal utilisateurs BeautyCRM : ${d.total_utilisateurs}\nInscrits aujourd'hui : ${d.nombre_periode}\nConversations en attente d'un humain : ${transferts}`
+  } catch (err) {
+    return `Erreur : ${err.message}`
+  }
+}
+
+function commandeHistorique(numero) {
+  const historique = obtenirHistorique(numero)
+  if (!historique || historique.length === 0) {
+    return `Aucun historique en memoire pour ${numero}.`
+  }
+  const texte = historique.slice(-10).map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`).join('\n')
+  return `📜 *Historique recent - ${numero}*\n\n${texte}`
+}
+
+async function commandeDesinscrire(numero) {
+  try {
+    await axios.post(`${API}/formations/admin/desinscrire`, { telephone: numero }, { headers: HEADERS, timeout: 10000 })
+    return `🚫 ${numero} est desormais exclu de tous les futurs sondages/annonces.`
+  } catch (err) {
+    return `Erreur : ${err.message}`
+  }
+}
+
+async function commandeEmploye(email, revoked) {
+  try {
+    const res = await axios.post(`${API}/formations/admin/employe-statut`, { email, revoked }, { headers: HEADERS, timeout: 10000 })
+    const e = res.data.employe
+    return `${revoked ? '🔒' : '🔓'} Employe ${e.nom} (${email}) ${revoked ? 'revoque' : 'reactive'}.`
+  } catch (err) {
+    if (err.response?.status === 404) return `Aucun employe trouve pour ${email}.`
+    return `Erreur : ${err.message}`
   }
 }
 
