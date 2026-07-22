@@ -1,5 +1,5 @@
 const axios = require('axios')
-const { reprendreConversation } = require('./agent')
+const { reprendreConversation, arreterConversation } = require('./agent')
 
 const API = process.env.BACKEND_API_URL
 const HEADERS = { Authorization: `Bearer ${process.env.WHATSAPP_SECRET}` }
@@ -10,6 +10,7 @@ const sondagesEnAttente = new Map()
 const AIDE_TEXTE = `📋 *Commandes disponibles*
 
 /reprendre <numero> - redonne la main a l'IA sur ce numero
+/stop <numero1,numero2> - l'IA ne repond plus a ces numeros jusqu'a /reprendre
 /info email <email> - infos sur un compte via son email
 /user jour - inscriptions BeautyCRM d'aujourd'hui
 /user semaine - inscriptions de la semaine
@@ -23,6 +24,7 @@ const AIDE_TEXTE = `📋 *Commandes disponibles*
 /notifier sauf <num1,num2> <message> - annonce a tous sauf ces numeros
 /contact <numero> <message> - contacte un numero precis
 /contact inscrit jour - message de bienvenue personnalise aux inscrits du jour
+/contact inscrit JJ/MM/AAAA - idem pour une date precise
 /aide - affiche ce message`
 
 function attendre(ms) {
@@ -118,12 +120,14 @@ poli, encourageant. Reponds UNIQUEMENT avec le texte du message, sans guillemets
   }
 }
 
-async function commandeContactInscritsJour(sock) {
+async function commandeContactInscritsJour(sock, dateISO) {
   try {
-    const res = await axios.get(`${API}/formations/admin/stats-utilisateurs?periode=jour`, { headers: HEADERS, timeout: 10000 })
+    const params = dateISO ? `date=${dateISO}` : `periode=jour`
+    const res = await axios.get(`${API}/formations/admin/stats-utilisateurs?${params}`, { headers: HEADERS, timeout: 10000 })
     const liste = res.data.liste || []
+    const labelPeriode = dateISO ? `le ${dateISO}` : "aujourd'hui"
 
-    if (liste.length === 0) return `Aucune inscription aujourd'hui, rien a envoyer.`
+    if (liste.length === 0) return `Aucune inscription ${labelPeriode}, rien a envoyer.`
 
     ;(async () => {
       let succes = 0
@@ -141,18 +145,18 @@ async function commandeContactInscritsJour(sock) {
         }
         await attendre(DELAI_ENTRE_ENVOIS_MS)
       }
-      console.log(`Contact inscrits du jour termine (${succes} succes, ${echecs} echecs)`)
+      console.log(`Contact inscrits ${labelPeriode} termine (${succes} succes, ${echecs} echecs)`)
       try {
         await sock.sendMessage(`${process.env.ADMIN_PHONE}@s.whatsapp.net`, {
-          text: `✅ Contact inscrits du jour termine.\n${succes} message(s) envoye(s), ${echecs} echec(s) sur ${liste.length} destinataire(s).`
+          text: `✅ Contact inscrits ${labelPeriode} termine.\n${succes} message(s) envoye(s), ${echecs} echec(s) sur ${liste.length} destinataire(s).`
         })
       } catch (err) {
         console.error('Erreur notification fin contact:', err.message)
       }
-    })().catch(err => console.error('Erreur contact inscrits jour en arriere-plan:', err.message))
+    })().catch(err => console.error('Erreur contact inscrits en arriere-plan:', err.message))
 
     const dureeMin = Math.ceil((liste.length * DELAI_ENTRE_ENVOIS_MS) / 60000)
-    return `👋 Envoi d'un message de bienvenue personnalise a ${liste.length} inscrit(s) du jour.\nDuree estimee : ~${dureeMin} minutes.`
+    return `👋 Envoi d'un message de bienvenue personnalise a ${liste.length} inscrit(s) ${labelPeriode}.\nDuree estimee : ~${dureeMin} minutes.`
   } catch (err) {
     return `Erreur : ${err.message}`
   }
@@ -381,6 +385,13 @@ async function traiterCommandeAdmin(texte, sock) {
     return ok ? `✅ L'IA reprend la conversation avec ${cible}.` : `Aucune conversation active trouvee pour ${cible}.`
   }
 
+  m = t.match(/^\/stop\s+([\d,\s]+)/i)
+  if (m) {
+    const numeros = m[1].split(',').map(n => n.replace(/[^0-9]/g, '')).filter(Boolean)
+    numeros.forEach(n => arreterConversation(n))
+    return `🛑 L'IA ne repondra plus a : ${numeros.join(', ')}.\nTape /reprendre <numero> pour reactiver.`
+  }
+
   m = t.match(/^\/info\s+(?:email|mail)\s+(\S+)/i)
   if (m) return await commandeInfoEmail(m[1])
 
@@ -408,6 +419,12 @@ async function traiterCommandeAdmin(texte, sock) {
   if (m) return await commandeNotifier(sock, m[1].trim(), [])
 
   if (/^\/contact\s+inscrit\s+jour$/i.test(t)) return await commandeContactInscritsJour(sock)
+
+  m = t.match(/^\/contact\s+inscrit\s+(\d{2})\/(\d{2})\/(\d{4})/i)
+  if (m) {
+    const dateISO = `${m[3]}-${m[2]}-${m[1]}` // conversion JJ/MM/AAAA -> AAAA-MM-JJ
+    return await commandeContactInscritsJour(sock, dateISO)
+  }
 
   m = t.match(/^\/contact\s+(\d[\d\s]*)\s+([\s\S]+)/i)
   if (m) return await commandeContactNumero(sock, m[1], m[2].trim())

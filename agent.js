@@ -447,6 +447,17 @@ function enregistrerMessageManuel(numero, texte) {
   ajouterLigneConversation(numero, 'Admin (manuel)', texte).catch(() => {})
 }
 
+function arreterConversation(numero) {
+  let conv = conversations.get(numero)
+  if (!conv) {
+    conv = { history: [], transferred: true, contexte: null }
+    conversations.set(numero, conv)
+  } else {
+    conv.transferred = true
+  }
+  return true
+}
+
 function reprendreConversation(numero) {
   const conv = conversations.get(numero)
   if (!conv) return false
@@ -454,4 +465,4 @@ function reprendreConversation(numero) {
   return true
 }
 
-module.exports = { gererMessageEntrant, reprendreConversation, enregistrerMessageManuel }
+module.exports = { gererMessageEntrant, reprendreConversation, enregistrerMessageManuel, arreterConversation }
