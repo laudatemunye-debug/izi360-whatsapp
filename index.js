@@ -49,8 +49,10 @@ async function startSock() {
     if (type !== 'notify') return
     for (const msg of messages) {
       try {
-        if (msg.key.remoteJid?.endsWith('@g.us')) continue // ignore les groupes
-        if (msg.key.remoteJid === 'status@broadcast') continue // ignore les statuts WhatsApp
+        // Liste blanche stricte : on ne traite QUE les vrais chats prives (1-a-1), jamais
+        // les groupes, statuts, chaines/newsletters, ou tout autre type de discussion
+        const estChatPrive = msg.key.remoteJid?.endsWith('@s.whatsapp.net') || msg.key.remoteJid?.endsWith('@lid')
+        if (!estChatPrive) continue
 
         const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text
         if (!texte) continue
