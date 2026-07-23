@@ -108,7 +108,14 @@ async function startSock() {
 
         const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel)
         if (reponse) {
-          await sock.sendMessage(msg.key.remoteJid, { text: reponse })
+          // Delai aleatoire (20-40s) pour paraitre plus naturel, sans bloquer le traitement
+          // des autres messages entrants pendant l'attente
+          const delaiMs = 20000 + Math.floor(Math.random() * 20000)
+          setTimeout(() => {
+            sock.sendMessage(msg.key.remoteJid, { text: reponse }).catch(err =>
+              console.error('Erreur envoi differe:', err.message)
+            )
+          }, delaiMs)
         }
       } catch (err) {
         console.error('Erreur traitement message entrant:', err.message)
