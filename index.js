@@ -55,7 +55,13 @@ async function startSock() {
         if (!estChatPrive) continue
 
         const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text
-        if (!texte) continue
+        if (!texte || !texte.trim()) continue
+
+        // Filtre anti-spam deterministe : messages contenant des liens connus de spam/actualites
+        // transferees, sans question directe adressee au bot -> ignore sans meme appeler l'IA
+        const domainesSpam = /trib\.al|wsj\.com|nyti\.ms|weforum\.org|tiktok\.com|vt\.tiktok|youtube\.com|youtu\.be|facebook\.com\/share|whatsapp\.com\/channel/i
+        const contientQuestion = /\?|beautycrm|beauty crm|application|formation/i
+        if (domainesSpam.test(texte) && !contientQuestion.test(texte)) continue
 
         const numero = msg.key.remoteJid.split('@')[0]
 
