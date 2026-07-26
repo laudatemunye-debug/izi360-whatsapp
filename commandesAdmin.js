@@ -170,8 +170,17 @@ async function commandeContactInscritsJour(sock, dateISO) {
 async function commandeContactNumero(sock, numero, message) {
   const num = numero.replace(/[^0-9]/g, '')
   try {
-    await sock.sendMessage(`${num}@s.whatsapp.net`, { text: message })
-    return `✅ Message envoye a ${num}.`
+    // Verifie le vrai JID WhatsApp pour ce numero (peut differer si c'est en realite un LID)
+    let jid = `${num}@s.whatsapp.net`
+    try {
+      const resultats = await sock.onWhatsApp(num)
+      if (resultats && resultats[0]?.jid) jid = resultats[0].jid
+    } catch (err) {
+      // si onWhatsApp echoue, on garde le format par defaut ci-dessus
+    }
+
+    await sock.sendMessage(jid, { text: message })
+    return `✅ Message envoye a ${num} (jid: ${jid}).`
   } catch (err) {
     return `Erreur lors de l'envoi a ${num} : ${err.message}`
   }
