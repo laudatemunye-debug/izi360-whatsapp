@@ -3,7 +3,7 @@ const express = require('express')
 const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
-const { gererMessageEntrant, enregistrerMessageManuel } = require('./agent')
+const { gererMessageEntrant, enregistrerMessageManuel, memoriserJid } = require('./agent')
 const { traiterCommandeAdmin, estEnAttenteSondage, traiterReponseSondage } = require('./commandesAdmin')
 
 const PORT = process.env.PORT || 3001
@@ -64,6 +64,7 @@ async function startSock() {
         if (domainesSpam.test(texte) && !contientQuestion.test(texte)) continue
 
         const numero = msg.key.remoteJid.split('@')[0]
+        memoriserJid(numero, msg.key.remoteJid)
 
         // Message tape manuellement par l'admin directement dans WhatsApp (pas via l'IA) :
         // on le memorise pour le contexte, sans generer de reponse ni traiter de commande

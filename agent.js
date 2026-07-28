@@ -4,6 +4,18 @@ const { ajouterLigneConversation } = require('./googleSheets')
 // Memoire de conversation en RAM : phone -> { history: [], transferred: bool, contexte: object|null }
 const conversations = new Map()
 
+// Memorise le vrai JID WhatsApp (avec son suffixe exact @s.whatsapp.net ou @lid) de chaque
+// numero connu, pour que /contact puisse retrouver la bonne adresse d'envoi
+const jidConnus = new Map()
+
+function memoriserJid(numero, remoteJid) {
+  if (numero && remoteJid) jidConnus.set(numero, remoteJid)
+}
+
+function obtenirJid(numero) {
+  return jidConnus.get(numero) || null
+}
+
 const MAX_HISTORY = 30 // nombre de messages gardes (user + assistant confondus)
 
 async function resumerEchangesAnciens(messagesAResumer, resumePrecedent) {
@@ -558,4 +570,6 @@ module.exports = {
   arreterConversation,
   compterTransferts,
   obtenirHistorique,
+  memoriserJid,
+  obtenirJid,
 }

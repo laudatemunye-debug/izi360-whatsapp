@@ -1,5 +1,5 @@
 const axios = require('axios')
-const { reprendreConversation, arreterConversation, compterTransferts, obtenirHistorique } = require('./agent')
+const { reprendreConversation, arreterConversation, compterTransferts, obtenirHistorique, obtenirJid } = require('./agent')
 
 const API = process.env.BACKEND_API_URL
 const HEADERS = { Authorization: `Bearer ${process.env.WHATSAPP_SECRET}` }
@@ -170,14 +170,21 @@ async function commandeContactInscritsJour(sock, dateISO) {
 async function commandeContactNumero(sock, numero, message) {
   const num = numero.replace(/[^0-9]/g, '')
   try {
-    // Verifie le vrai JID WhatsApp pour ce numero (peut differer si c'est en realite un LID)
-    let jid = `${num}@s.whatsapp.net`
-    try {
-      const resultats = await sock.onWhatsApp(num)
-      if (resultats && resultats[0]?.jid) jid = resultats[0].jid
-    } catch (err) {
-      // si onWhatsApp echoue, on garde le format par defaut ci-dessus
+    // Priorite 1 : le vrai JID deja vu pour ce numero (le plus fiable, marche pour les LID)
+    let jid = obtenirJid(num)
+
+    // Priorite 2 : verification via onWhatsApp (marche pour un vrai numero de telephone)
+    if (!jid) {
+      try {
+        const resultats = await sock.onWhatsApp(num)
+        if (resultats && resultats[0]?.jid) jid = resultats[0].jid
+      } catch (err) {
+        // ignore, on retombe sur le format par defaut
+      }
     }
+
+    // Repli : format standard par defaut
+    if (!jid) jid = `${num}@s.whatsapp.net`
 
     await sock.sendMessage(jid, { text: message })
     return `✅ Message envoye a ${num} (jid: ${jid}).`
