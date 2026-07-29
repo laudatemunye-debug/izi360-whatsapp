@@ -1,5 +1,6 @@
 const axios = require('axios')
 const { ajouterLigneConversation } = require('./googleSheets')
+const { construirePromptSystemeLongrich, MESSAGE_CLARIFICATION } = require('./longrich')
 
 // Memoire de conversation en RAM : phone -> { history: [], transferred: bool, contexte: object|null }
 const conversations = new Map()
@@ -77,6 +78,27 @@ async function recupererContexteParEmail(email) {
 
 const REGEX_EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/
 const REGEX_TELEPHONE = /(?:\+?\d[\s.-]?){9,14}/
+
+// Mots-cles qui indiquent explicitement une question sur l'application BeautyCRM
+const REGEX_APP = /beautycrm|beauty crm|application|logiciel|app\b|telecharger|installer|formation|inscription/i
+
+// Mots-cles qui indiquent une question de prix/produit -> mode Longrich
+const REGEX_PRIX_PRODUIT = /longrich|combien|prix|tarif|ca coute|\u00e7a co\u00fbte|coute\b|co\u00fbte\b/i
+
+// Determine le secteur du message : 'beautycrm', 'longrich', 'ambigu' (a clarifier), ou 'ignore'
+function detecterSecteur(texte, viensDeFacebook, viensDeStatut, secteurDejaFixe) {
+  const estApp = REGEX_APP.test(texte)
+  const estPrixProduit = REGEX_PRIX_PRODUIT.test(texte)
+
+  if (estApp && !estPrixProduit) return 'beautycrm'
+  if (estPrixProduit && !estApp) return 'longrich'
+
+  if (viensDeFacebook || viensDeStatut) return 'ambigu'
+
+  if (secteurDejaFixe) return secteurDejaFixe
+
+  return 'ignore'
+}
 
 const LIEN_APP = process.env.APP_DOWNLOAD_URL || ''
 
@@ -426,12 +448,12 @@ Le prospect a demande a parler a quelqu'un. Contacte-le directement sur WhatsApp
   }
 }
 
-async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = false, numeroReel = null) {
+async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = false, numeroReel = null, viensDeStatut = false) {
   let conv = conversations.get(numero)
 
   if (!conv) {
     const contexte = await recupererContexte(numero)
-    conv = { history: [], transferred: false, contexte }
+    conv = { history: [], transferred: false, contexte, secteur: null }
     conversations.set(numero, conv)
   }
 
@@ -440,44 +462,62 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
 
   const estPremierContact = conv.history.length === 0
 
-  // Si un email est detecte dans le message, on le privilegie pour retrouver le contexte
-  // (BeautyCRM identifie les comptes principalement par email, plus fiable que le numero WhatsApp)
-  const emailDetecte = texteRecu.match(REGEX_EMAIL)?.[0]
-  if (emailDetecte && conv.emailConfirme !== emailDetecte) {
-    const contexteParEmail = await recupererContexteParEmail(emailDetecte)
-    if (contexteParEmail) {
-      // Verification de securite : le numero qui ecrit doit correspondre au numero enregistre
-      // pour cet email, sinon on ne revele pas les infos sensibles (entreprise, devise, etc.)
-      const numeroEnregistre = (
-        contexteParEmail.utilisateur_beautycrm?.telephone ||
-        contexteParEmail.inscription_formation?.telephone ||
-        ''
-      ).replace(/[^0-9]/g, '')
-      const numeroActuel = (numeroReel || numero || '').replace(/[^0-9]/g, '')
-      const identiteVerifiee = numeroEnregistre && numeroActuel && numeroEnregistre === numeroActuel
+  // --- Routage secteur : App vs Longrich vs ambigu vs ignore ---
+  const secteur = detecterSecteur(texteRecu, viensDeFacebook, viensDeStatut, conv.secteur)
 
-      conv.contexte = { ...contexteParEmail, identite_verifiee: identiteVerifiee }
-    }
-    conv.emailConfirme = emailDetecte
+  if (secteur === 'ignore') {
+    ajouterLigneConversation(numero, 'IA (ignore - hors sujet)', '(pas de reponse envoyee)').catch(() => {})
+    return null
   }
 
-  // Si un numero de telephone est tape dans le texte (ex: "info 243997245614"), meme logique
-  // de recherche + verification que pour l'email
-  const telephoneDetecte = (texteRecu.match(REGEX_TELEPHONE)?.[0] || '').replace(/[^0-9]/g, '')
-  if (telephoneDetecte && telephoneDetecte.length >= 9 && conv.telephoneConfirme !== telephoneDetecte) {
-    const contexteParTelephone = await recupererContexte(telephoneDetecte)
-    if (contexteParTelephone) {
-      const numeroEnregistre = (
-        contexteParTelephone.utilisateur_beautycrm?.telephone ||
-        contexteParTelephone.inscription_formation?.telephone ||
-        ''
-      ).replace(/[^0-9]/g, '')
-      const numeroActuel = (numeroReel || numero || '').replace(/[^0-9]/g, '')
-      const identiteVerifiee = numeroEnregistre && numeroActuel && numeroEnregistre === numeroActuel
+  if (secteur === 'ambigu') {
+    conv.history.push({ role: 'user', content: texteRecu })
+    conv.history.push({ role: 'assistant', content: MESSAGE_CLARIFICATION })
+    ajouterLigneConversation(numero, 'Utilisateur', texteRecu).catch(() => {})
+    ajouterLigneConversation(numero, 'IA (clarification secteur)', MESSAGE_CLARIFICATION).catch(() => {})
+    return MESSAGE_CLARIFICATION
+  }
 
-      conv.contexte = { ...contexteParTelephone, identite_verifiee: identiteVerifiee }
+  // Secteur tranche (beautycrm ou longrich) : on le fixe pour la suite de la conversation
+  conv.secteur = secteur
+
+  // Si un email est detecte dans le message, on le privilegie pour retrouver le contexte
+  // (BeautyCRM identifie les comptes principalement par email, plus fiable que le numero WhatsApp)
+  // -> uniquement pertinent en secteur beautycrm
+  if (secteur === 'beautycrm') {
+    const emailDetecte = texteRecu.match(REGEX_EMAIL)?.[0]
+    if (emailDetecte && conv.emailConfirme !== emailDetecte) {
+      const contexteParEmail = await recupererContexteParEmail(emailDetecte)
+      if (contexteParEmail) {
+        const numeroEnregistre = (
+          contexteParEmail.utilisateur_beautycrm?.telephone ||
+          contexteParEmail.inscription_formation?.telephone ||
+          ''
+        ).replace(/[^0-9]/g, '')
+        const numeroActuel = (numeroReel || numero || '').replace(/[^0-9]/g, '')
+        const identiteVerifiee = numeroEnregistre && numeroActuel && numeroEnregistre === numeroActuel
+
+        conv.contexte = { ...contexteParEmail, identite_verifiee: identiteVerifiee }
+      }
+      conv.emailConfirme = emailDetecte
     }
-    conv.telephoneConfirme = telephoneDetecte
+
+    const telephoneDetecte = (texteRecu.match(REGEX_TELEPHONE)?.[0] || '').replace(/[^0-9]/g, '')
+    if (telephoneDetecte && telephoneDetecte.length >= 9 && conv.telephoneConfirme !== telephoneDetecte) {
+      const contexteParTelephone = await recupererContexte(telephoneDetecte)
+      if (contexteParTelephone) {
+        const numeroEnregistre = (
+          contexteParTelephone.utilisateur_beautycrm?.telephone ||
+          contexteParTelephone.inscription_formation?.telephone ||
+          ''
+        ).replace(/[^0-9]/g, '')
+        const numeroActuel = (numeroReel || numero || '').replace(/[^0-9]/g, '')
+        const identiteVerifiee = numeroEnregistre && numeroActuel && numeroEnregistre === numeroActuel
+
+        conv.contexte = { ...contexteParTelephone, identite_verifiee: identiteVerifiee }
+      }
+      conv.telephoneConfirme = telephoneDetecte
+    }
   }
 
   conv.history.push({ role: 'user', content: texteRecu })
@@ -489,7 +529,11 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
     conv.history = conv.history.slice(-MAX_HISTORY)
   }
 
-  const systemPrompt = construirePromptSysteme(conv.contexte, estPremierContact, viensDeFacebook, conv.resumeAnterieur)
+  // Construction du system prompt : jamais les deux secteurs melanges dans le meme appel
+  const systemPrompt = secteur === 'longrich'
+    ? construirePromptSystemeLongrich(estPremierContact, conv.resumeAnterieur)
+    : construirePromptSysteme(conv.contexte, estPremierContact, viensDeFacebook, conv.resumeAnterieur)
+
   let resultat
   try {
     resultat = await appellerGroq(systemPrompt, conv.history)

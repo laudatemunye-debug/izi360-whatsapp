@@ -115,7 +115,13 @@ async function startSock() {
           msg.messageStubParameters?.some?.(p => /facebook|instagram|ctwa/i.test(p))
         )
 
-        const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel)
+        // Detection d'une reponse a un statut WhatsApp
+        const viensDeStatut = !!(
+          contextInfo?.remoteJid === 'status@broadcast' ||
+          (msg.message?.extendedTextMessage?.contextInfo?.stanzaId && contextInfo?.participant)
+        )
+
+        const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel, viensDeStatut)
         if (reponse) {
           // Delai aleatoire (20-40s) pour paraitre plus naturel, sans bloquer le traitement
           // des autres messages entrants pendant l'attente
