@@ -45,10 +45,22 @@ async function startSock() {
     }
   })
 
+  const messagesDejaTraites = new Set()
+
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
     for (const msg of messages) {
       try {
+        // Anti-doublon : ignore un message deja traite (meme ID), evite les reponses en double
+        const msgId = msg.key?.id
+        if (msgId) {
+          if (messagesDejaTraites.has(msgId)) continue
+          messagesDejaTraites.add(msgId)
+          if (messagesDejaTraites.size > 1000) {
+            const premier = messagesDejaTraites.values().next().value
+            messagesDejaTraites.delete(premier)
+          }
+        }
         // Liste blanche stricte : on ne traite QUE les vrais chats prives (1-a-1), jamais
         // les groupes, statuts, chaines/newsletters, ou tout autre type de discussion
         const estChatPrive = msg.key.remoteJid?.endsWith('@s.whatsapp.net') || msg.key.remoteJid?.endsWith('@lid')
