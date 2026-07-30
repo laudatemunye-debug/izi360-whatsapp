@@ -154,7 +154,10 @@ moment) :
    de detail, avec une marge d'environ 20% sur chaque produit vendu.
 
 3. BONUS DE PARRAINAGE : quand un partenaire parraine une nouvelle personne qui rejoint avec un
-   des 2 packs ci-dessus, il touche un bonus de 15$ a 45$ selon le pack choisi par le filleul.
+   des 2 packs ci-dessus, il touche UN MONTANT FIXE ET UNIQUE de 15$ a 45$ selon le pack choisi par
+   le filleul (verse une seule fois a l'inscription, PAS une commission recurrente sur les ventes
+   futures du filleul - ne jamais confondre avec le bonus de performance, qui lui est recurrent et
+   base sur les ventes/PV de l'equipe dans la duree).
 
 4. Il existe 6 mecanismes de gains au total : vente au detail, bonus de parrainage, bonus de
    performance, bonus de leadership, bonus de developpement, et bonus de retail. Quand la personne
