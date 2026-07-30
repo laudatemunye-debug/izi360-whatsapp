@@ -129,8 +129,7 @@ async function startSock() {
 
         // Detection d'une reponse a un statut WhatsApp
         const viensDeStatut = !!(
-          contextInfo?.remoteJid === 'status@broadcast' ||
-          (msg.message?.extendedTextMessage?.contextInfo?.stanzaId && contextInfo?.participant)
+          contextInfo?.remoteJid === 'status@broadcast'
         )
 
         const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel, viensDeStatut)
