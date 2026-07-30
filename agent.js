@@ -83,7 +83,7 @@ const REGEX_TELEPHONE = /(?:\+?\d[\s.-]?){9,14}/
 const REGEX_APP = /beautycrm|beauty crm|application|logiciel|app\b|telecharger|installer|formation|inscription/i
 
 // Mots-cles qui indiquent une question de prix/produit -> mode Longrich
-const REGEX_PRIX_PRODUIT = /longrich|combien|prix|tarif|ca coute|\u00e7a co\u00fbte|coute\b|co\u00fbte\b/i
+const REGEX_PRIX_PRODUIT = /longrich|combien|prix|tarif|ca coute|\u00e7a co\u00fbte|coute\b|co\u00fbte\b|partenaire|distributeur|opportunit|devenir membre|rejoindre|parrainage|parrainer|mlm|gagner de l'argent|revenu|revendre|business/i
 
 // Determine le secteur du message : 'beautycrm', 'longrich', 'ambigu' (a clarifier), ou 'ignore'
 function detecterSecteur(texte, viensDeFacebook, viensDeStatut, secteurDejaFixe) {
