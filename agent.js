@@ -448,7 +448,7 @@ Le prospect a demande a parler a quelqu'un. Contacte-le directement sur WhatsApp
   }
 }
 
-async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = false, numeroReel = null, viensDeStatut = false) {
+async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = false, numeroReel = null, viensDeStatut = false, legendeStatut = null) {
   let conv = conversations.get(numero)
 
   if (!conv) {
@@ -531,7 +531,7 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
 
   // Construction du system prompt : jamais les deux secteurs melanges dans le meme appel
   const systemPrompt = secteur === 'longrich'
-    ? construirePromptSystemeLongrich(estPremierContact, conv.resumeAnterieur)
+    ? construirePromptSystemeLongrich(estPremierContact, conv.resumeAnterieur, legendeStatut)
     : construirePromptSysteme(conv.contexte, estPremierContact, viensDeFacebook, conv.resumeAnterieur)
 
   let resultat

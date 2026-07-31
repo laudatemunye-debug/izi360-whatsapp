@@ -132,7 +132,20 @@ async function startSock() {
           contextInfo?.remoteJid === 'status@broadcast'
         )
 
-        const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel, viensDeStatut)
+        // Si c'est une reponse a un statut, on recupere la legende (texte/caption) du statut
+        // cite pour que l'IA sache a quel produit la personne fait reference
+        let legendeStatut = null
+        if (viensDeStatut) {
+          const quotedMsg = contextInfo?.quotedMessage
+          legendeStatut =
+            quotedMsg?.imageMessage?.caption ||
+            quotedMsg?.videoMessage?.caption ||
+            quotedMsg?.conversation ||
+            quotedMsg?.extendedTextMessage?.text ||
+            null
+        }
+
+        const reponse = await gererMessageEntrant(sock, numero, texte, viensDeFacebook, numeroReel, viensDeStatut, legendeStatut)
         if (reponse) {
           // Delai aleatoire (20-40s) pour paraitre plus naturel, sans bloquer le traitement
           // des autres messages entrants pendant l'attente

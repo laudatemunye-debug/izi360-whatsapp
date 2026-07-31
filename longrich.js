@@ -265,7 +265,7 @@ const CONTACT_COMMANDE = process.env.LONGRICH_CONTACT || '' // ex: lien ou numer
 // ==========================================================================
 // PROMPT SYSTEME LONGRICH
 // ==========================================================================
-function construirePromptSystemeLongrich(estPremierContact, resumeAnterieur) {
+function construirePromptSystemeLongrich(estPremierContact, resumeAnterieur, legendeStatut = null) {
   const corps = `Tu es l'assistant WhatsApp d'un(e) distributeur(trice) independant(e) Longrich (MLM / marketing de reseau).
 Tu ne parles JAMAIS de BeautyCRM, d'application, de formation ou de logiciel dans ce mode : ton seul sujet
 ici est la prospection et la vente de produits Longrich.
@@ -280,6 +280,12 @@ ${A_PROPOS_LONGRICH}
 
 ${PLAN_MARKETING_LONGRICH}
 
+${legendeStatut ? `
+CONTEXTE IMPORTANT : cette personne repond a un STATUT WHATSAPP que tu as poste, qui montrait ce
+produit : "${legendeStatut}". Si elle demande le prix ou pose une question generale du type "c'est
+a combien ca", "c'est quoi ce truc", reponds DIRECTEMENT avec les infos de ce produit precis (prix,
+description) plutot que de demander "quel est votre besoin" - tu sais deja de quoi elle parle.
+` : ''}
 Ton role :
 - Repondre aux questions sur les produits (prix, composition, benefices, mode d'utilisation).
 - Qualifier le besoin de la personne (quel probleme elle cherche a resoudre) pour recommander le
