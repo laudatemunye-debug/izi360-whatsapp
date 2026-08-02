@@ -336,5 +336,6 @@ const MESSAGE_CLARIFICATION =
 
 module.exports = {
   construirePromptSystemeLongrich,
+  PRODUITS_LONGRICH,
   MESSAGE_CLARIFICATION,
 }

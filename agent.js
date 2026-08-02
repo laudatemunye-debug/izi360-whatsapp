@@ -1,6 +1,6 @@
 const axios = require('axios')
 const { ajouterLigneConversation, incrementerUsageGroqJournalier } = require('./googleSheets')
-const { construirePromptSystemeLongrich, MESSAGE_CLARIFICATION } = require('./longrich')
+const { construirePromptSystemeLongrich, MESSAGE_CLARIFICATION, PRODUITS_LONGRICH } = require('./longrich')
 
 // Memoire de conversation en RAM : phone -> { history: [], transferred: bool, contexte: object|null }
 const conversations = new Map()
@@ -149,6 +149,7 @@ const REGEX_TELEPHONE = /(?:\+?\d[\s.-]?){9,14}/
 const REGEX_APP = /beautycrm|beauty crm|application|logiciel|app\b|telecharger|installer|formation|inscription/i
 
 // Mots-cles qui indiquent une question de prix/produit -> mode Longrich
+const REGEX_DEMANDE_CATALOGUE = /catalogue|liste des produits|tous les produits|liste complete/i
 const REGEX_PRIX_PRODUIT = /longrich|combien|prix|tarif|ca coute|\u00e7a co\u00fbte|coute\b|co\u00fbte\b|partenaire|distributeur|opportunit|devenir membre|rejoindre|parrainage|parrainer|mlm|gagner de l'argent|revenu|revendre|business/i
 
 // Determine le secteur du message : 'beautycrm', 'longrich', 'ambigu' (a clarifier), ou 'ignore'
@@ -596,6 +597,15 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
     const messagesAResumer = conv.history.slice(0, nbAEvincer)
     conv.resumeAnterieur = await resumerEchangesAnciens(messagesAResumer, conv.resumeAnterieur)
     conv.history = conv.history.slice(-MAX_HISTORY)
+  }
+
+  // Demande de catalogue complet en secteur Longrich : on envoie le texte deja ecrit,
+  // sans passer par l'IA (plus rapide, fiable, et evite les reponses tronquees/coup en tokens)
+  if (secteur === 'longrich' && REGEX_DEMANDE_CATALOGUE.test(texteRecu)) {
+    const reponseCatalogue = `Voici notre catalogue complet Longrich :\n\n${PRODUITS_LONGRICH}\n\nDis-moi si tu veux plus de details sur un produit en particulier !`
+    conv.history.push({ role: 'assistant', content: reponseCatalogue })
+    ajouterLigneConversation(numero, 'IA (catalogue direct)', reponseCatalogue).catch(() => {})
+    return reponseCatalogue
   }
 
   // Construction du system prompt : jamais les deux secteurs melanges dans le meme appel
