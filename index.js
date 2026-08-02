@@ -3,7 +3,7 @@ const express = require('express')
 const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
-const { gererMessageEntrant, enregistrerMessageManuel, memoriserJid } = require('./agent')
+const { gererMessageEntrant, enregistrerMessageManuel, memoriserJid, obtenirStatsGroq } = require('./agent')
 const { traiterCommandeAdmin, estEnAttenteSondage, traiterReponseSondage } = require('./commandesAdmin')
 
 const PORT = process.env.PORT || 3001
@@ -171,6 +171,10 @@ function checkSecret(req, res, next) {
 
 app.get('/status', (req, res) => {
   res.json({ ready: isReady })
+})
+
+app.get('/groq-usage', (req, res) => {
+  res.json(obtenirStatsGroq())
 })
 
 app.post('/send', checkSecret, async (req, res) => {

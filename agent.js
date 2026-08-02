@@ -5,6 +5,43 @@ const { construirePromptSystemeLongrich, MESSAGE_CLARIFICATION } = require('./lo
 // Memoire de conversation en RAM : phone -> { history: [], transferred: bool, contexte: object|null }
 const conversations = new Map()
 
+// ==========================================================================
+// SUIVI DE CONSOMMATION GROQ (requetes/tokens par jour, remis a zero chaque
+// jour, uniquement en memoire - perdu au redemarrage, mais suffisant pour
+// surveiller la tendance au quotidien)
+// ==========================================================================
+let statsGroq = { date: null, requetes: 0, tokensPrompt: 0, tokensCompletion: 0, tokensTotal: 0, erreurs429: 0, erreurs413: 0 }
+
+function dateAujourdhui() {
+  return new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+}
+
+function enregistrerUsageGroq(usage) {
+  const aujourdhui = dateAujourdhui()
+  if (statsGroq.date !== aujourdhui) {
+    statsGroq = { date: aujourdhui, requetes: 0, tokensPrompt: 0, tokensCompletion: 0, tokensTotal: 0, erreurs429: 0, erreurs413: 0 }
+  }
+  statsGroq.requetes += 1
+  if (usage) {
+    statsGroq.tokensPrompt += usage.prompt_tokens || 0
+    statsGroq.tokensCompletion += usage.completion_tokens || 0
+    statsGroq.tokensTotal += usage.total_tokens || 0
+  }
+}
+
+function enregistrerErreurGroq(statusCode) {
+  const aujourdhui = dateAujourdhui()
+  if (statsGroq.date !== aujourdhui) {
+    statsGroq = { date: aujourdhui, requetes: 0, tokensPrompt: 0, tokensCompletion: 0, tokensTotal: 0, erreurs429: 0, erreurs413: 0 }
+  }
+  if (statusCode === 429) statsGroq.erreurs429 += 1
+  if (statusCode === 413) statsGroq.erreurs413 += 1
+}
+
+function obtenirStatsGroq() {
+  return statsGroq
+}
+
 // Memorise le vrai JID WhatsApp (avec son suffixe exact @s.whatsapp.net ou @lid) de chaque
 // numero connu, pour que /contact puisse retrouver la bonne adresse d'envoi
 const jidConnus = new Map()
@@ -392,6 +429,7 @@ async function appellerGroqAvecReessai(payload, tentativesMax = 3) {
       )
     } catch (err) {
       const est429 = err.response?.status === 429
+      enregistrerErreurGroq(err.response?.status)
       if (est429 && tentative < tentativesMax) {
         const pause = tentative * 2000 // 2s, puis 4s
         console.log(`Groq 429, nouvelle tentative dans ${pause}ms (essai ${tentative}/${tentativesMax})`)
@@ -416,6 +454,8 @@ async function appellerGroq(systemPrompt, historique) {
     temperature: 0.4,
     max_tokens: 800,
   })
+
+  enregistrerUsageGroq(res.data.usage)
 
   const contenu = res.data.choices[0].message.content
   try {
@@ -608,6 +648,7 @@ function obtenirHistorique(numero) {
 }
 
 module.exports = {
+  obtenirStatsGroq,
   gererMessageEntrant,
   reprendreConversation,
   enregistrerMessageManuel,
