@@ -260,12 +260,17 @@ INSTRUCTION IMPORTANTE :
   deverser en un seul message.
 `
 
+// Detecte si la personne demande explicitement les details avances du plan marketing
+// (evite d'envoyer ce gros bloc de texte a CHAQUE appel, ce qui faisait planter Groq avec
+// des erreurs 413 "payload too large")
+const REGEX_DETAILS_AVANCES = /plan complet|tous les bonus|comment ca marche en detail|chiffres exacts|niveau(x)? d'entree|\brang(s)?\b|bonus de (performance|leadership|developpement)/i
+
 const CONTACT_COMMANDE = process.env.LONGRICH_CONTACT || '' // ex: lien ou numero pour finaliser une commande
 
 // ==========================================================================
 // PROMPT SYSTEME LONGRICH
 // ==========================================================================
-function construirePromptSystemeLongrich(estPremierContact, resumeAnterieur, legendeStatut = null) {
+function construirePromptSystemeLongrich(estPremierContact, resumeAnterieur, legendeStatut = null, texteRecu = '') {
   const corps = `Tu es l'assistant WhatsApp d'un(e) distributeur(trice) independant(e) Longrich (MLM / marketing de reseau).
 Tu ne parles JAMAIS de BeautyCRM, d'application, de formation ou de logiciel dans ce mode : ton seul sujet
 ici est la prospection et la vente de produits Longrich.
@@ -278,7 +283,7 @@ ${OPPORTUNITE_LONGRICH}
 
 ${A_PROPOS_LONGRICH}
 
-${PLAN_MARKETING_LONGRICH}
+${REGEX_DETAILS_AVANCES.test(texteRecu) ? PLAN_MARKETING_LONGRICH : '(Le plan marketing complet avec tous les chiffres exacts existe mais n\'est pas affiche ici pour rester leger - si la personne insiste vraiment pour les details/chiffres exacts des rangs et bonus avances, dis-lui que tu verifies et proposes un transfert si besoin.)'}
 
 ${legendeStatut ? `
 CONTEXTE IMPORTANT : cette personne repond a un STATUT WHATSAPP que tu as poste, qui montrait ce

@@ -414,7 +414,7 @@ async function appellerGroq(systemPrompt, historique) {
     messages,
     response_format: { type: 'json_object' },
     temperature: 0.4,
-    max_tokens: 400,
+    max_tokens: 800,
   })
 
   const contenu = res.data.choices[0].message.content
@@ -531,7 +531,7 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
 
   // Construction du system prompt : jamais les deux secteurs melanges dans le meme appel
   const systemPrompt = secteur === 'longrich'
-    ? construirePromptSystemeLongrich(estPremierContact, conv.resumeAnterieur, legendeStatut)
+    ? construirePromptSystemeLongrich(estPremierContact, conv.resumeAnterieur, legendeStatut, texteRecu)
     : construirePromptSysteme(conv.contexte, estPremierContact, viensDeFacebook, conv.resumeAnterieur)
 
   let resultat
