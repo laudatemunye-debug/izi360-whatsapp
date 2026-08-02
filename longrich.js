@@ -94,7 +94,7 @@ const PRODUITS_LONGRICH = `
 - Pack Q SILVER — 180$ : 1 parfum homme, 1 parfum femme, 2 cartons savon noir, 1 the vert,
   1 the brun, 1 the rose, 1 calcium, 1 gobelet alcalin, 10 dentifrices 200g.
 
-(NB : pour tout produit ou prix non liste ici, dis a la personne que tu verifies aupres de la
+(NB : pour tout produit ou prix non liste ici, dis a la personne que tu verifies aupres du
 distributeur et propose un transfert si besoin.)
 `
 
