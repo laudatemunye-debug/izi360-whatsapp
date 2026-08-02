@@ -1,5 +1,5 @@
 const axios = require('axios')
-const { ajouterLigneConversation } = require('./googleSheets')
+const { ajouterLigneConversation, incrementerUsageGroqJournalier } = require('./googleSheets')
 const { construirePromptSystemeLongrich, MESSAGE_CLARIFICATION } = require('./longrich')
 
 // Memoire de conversation en RAM : phone -> { history: [], transferred: bool, contexte: object|null }
@@ -27,6 +27,13 @@ function enregistrerUsageGroq(usage) {
     statsGroq.tokensCompletion += usage.completion_tokens || 0
     statsGroq.tokensTotal += usage.total_tokens || 0
   }
+
+  deltaGroq.requetes += 1
+  if (usage) {
+    deltaGroq.tokensPrompt += usage.prompt_tokens || 0
+    deltaGroq.tokensCompletion += usage.completion_tokens || 0
+    deltaGroq.tokensTotal += usage.total_tokens || 0
+  }
 }
 
 function enregistrerErreurGroq(statusCode) {
@@ -36,11 +43,33 @@ function enregistrerErreurGroq(statusCode) {
   }
   if (statusCode === 429) statsGroq.erreurs429 += 1
   if (statusCode === 413) statsGroq.erreurs413 += 1
+
+  if (statusCode === 429) deltaGroq.erreurs429 += 1
+  if (statusCode === 413) deltaGroq.erreurs413 += 1
 }
 
 function obtenirStatsGroq() {
   return statsGroq
 }
+
+// Accumule les stats depuis la derniere synchronisation vers Google Sheets (remis a zero
+// a chaque flush, independamment de statsGroq qui lui suit la journee en cours)
+let deltaGroq = { requetes: 0, tokensPrompt: 0, tokensCompletion: 0, tokensTotal: 0, erreurs429: 0, erreurs413: 0 }
+
+async function flushGroqVersSheet() {
+  const aEnvoyer = { ...deltaGroq }
+  const rienAEnvoyer = Object.values(aEnvoyer).every(v => v === 0)
+  if (rienAEnvoyer) return
+
+  deltaGroq = { requetes: 0, tokensPrompt: 0, tokensCompletion: 0, tokensTotal: 0, erreurs429: 0, erreurs413: 0 }
+  await incrementerUsageGroqJournalier(dateAujourdhui(), aEnvoyer)
+}
+
+// Synchronise vers Google Sheets toutes les 5 minutes (pas a chaque message, pour ne pas
+// surcharger l'API Google Sheets)
+setInterval(() => {
+  flushGroqVersSheet().catch(() => {})
+}, 5 * 60 * 1000)
 
 // Memorise le vrai JID WhatsApp (avec son suffixe exact @s.whatsapp.net ou @lid) de chaque
 // numero connu, pour que /contact puisse retrouver la bonne adresse d'envoi

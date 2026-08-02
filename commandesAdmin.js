@@ -392,6 +392,28 @@ async function commandeInscritsFormation(recherche) {
   }
 }
 
+const { obtenirStatsGroqSemaine } = require('./googleSheets')
+
+async function commandeGroqUsage() {
+  const stats = await obtenirStatsGroqSemaine()
+  if (!stats.length) return 'Aucune donnee de consommation Groq disponible pour le moment.'
+
+  const joursSemaine = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+
+  let texte = '📊 Consommation Groq (7 derniers jours) :\n\n'
+  let totalEchecs = 0
+
+  for (const jour of stats) {
+    const nomJour = joursSemaine[new Date(jour.date + 'T00:00:00').getDay()]
+    const echecsJour = jour.erreurs429 + jour.erreurs413
+    totalEchecs += echecsJour
+    texte += `${nomJour.charAt(0).toUpperCase() + nomJour.slice(1)} (${jour.date}) : ${jour.requetes} requetes, ${jour.tokensTotal} tokens, ${echecsJour} echec(s)\n`
+  }
+
+  texte += `\nTotal echecs sur la periode : ${totalEchecs}`
+  return texte
+}
+
 async function commandeStats() {
   try {
     const res = await axios.get(`${API}/formations/admin/stats-utilisateurs?periode=jour`, { headers: HEADERS, timeout: 10000 })
@@ -436,6 +458,8 @@ async function traiterCommandeAdmin(texte, sock) {
   const t = texte.trim()
 
   if (/^\/aide$/i.test(t)) return AIDE_TEXTE
+
+  if (/^\/groq-usage$/i.test(t)) return await commandeGroqUsage()
 
   let m
 
