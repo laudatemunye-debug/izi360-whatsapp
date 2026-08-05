@@ -495,13 +495,24 @@ async function appellerGroq(systemPrompt, historique) {
   }
 }
 
-async function notifierAdmin(sock, numero, contexte, historique, numeroReel) {
+async function notifierAdmin(sock, numero, contexte, historique, numeroReel, produit = null, livraison = null) {
   const adminJid = `${process.env.ADMIN_PHONE}@s.whatsapp.net`
   const nom = contexte?.inscription_formation?.nom || contexte?.utilisateur_beautycrm?.nom || 'Inconnu'
   const titreFormation = contexte?.inscription_formation?.titre
   const dernierMsgs = historique.slice(-6).map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`).join('\n')
 
-  const texte = `🔔 *Transfert demande*
+  const texte = produit
+    ? `🛒 *Commande en cours pour ${produit}*
+
+*Client :* ${nom}
+*Numero :* ${numero}${numeroReel ? ` (vrai numero : ${numeroReel})` : ''}
+*Livraison souhaitee :* ${livraison || 'a preciser'}
+
+*Derniers echanges :*
+${dernierMsgs}
+
+Contacte le client sur WhatsApp au ${numero} pour finaliser.`
+    : `🔔 *Transfert demande*
 
 *Prospect :* ${nom}
 *Numero :* ${numero}${numeroReel ? ` (vrai numero : ${numeroReel})` : ''}
@@ -632,7 +643,7 @@ async function gererMessageEntrant(sock, numero, texteRecu, viensDeFacebook = fa
 
   if (resultat.transfert === 'confirme') {
     conv.transferred = true
-    await notifierAdmin(sock, numero, conv.contexte, conv.history, numeroReel)
+    await notifierAdmin(sock, numero, conv.contexte, conv.history, numeroReel, resultat.produit || null, resultat.livraison || null)
   }
 
   return resultat.reponse
